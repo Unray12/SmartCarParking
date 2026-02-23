@@ -1,0 +1,10 @@
+{
+  "name": "smart-parking-web",
+  "version": "1.0.0",
+  "type": "module",
+  "private": true,
+  "description": "Smart parking web dashboard",
+  "scripts": {
+    "start": "python3 -m http.server 5173 --directory renderer"
+  }
+}

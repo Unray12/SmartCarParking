@@ -1,0 +1,427 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Smart Parking Dashboard</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell" id="appShell">
+      <aside class="sidebar" id="sidebar">
+        <div class="sidebar-top">
+          <div class="brand">
+            <h1>SmartCar Parking</h1>
+            <p>Camera + RFID + AI Plate</p>
+          </div>
+          <button
+            class="sidebar-icon-btn"
+            id="sidebarToggleBtn"
+            type="button"
+            aria-controls="sidebar"
+            aria-label="Ẩn menu"
+            aria-expanded="true"
+          >
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
+        </div>
+
+        <nav class="side-nav" id="sideNav">
+          <button class="nav-item is-active" data-view="dashboard">Dashboard</button>
+          <button class="nav-item" data-view="history">History</button>
+          <button class="nav-item" data-view="rfid">RFID Gate</button>
+          <button class="nav-item" data-view="ai">AI Center</button>
+          <button class="nav-item" data-view="user">User</button>
+          <button class="nav-item" data-view="settings">Settings</button>
+          <button class="nav-item" data-view="system">System</button>
+        </nav>
+
+        <div class="sidebar-foot">
+          <span class="badge" id="userBadge">Guest</span>
+        </div>
+      </aside>
+      <button class="sidebar-expand-btn" id="sidebarExpandBtn" type="button" aria-label="Mở menu">
+        <span></span>
+        <span></span>
+        <span></span>
+      </button>
+      <button class="sidebar-overlay" id="sidebarOverlay" type="button" aria-label="Đóng menu"></button>
+
+      <main class="content">
+        <header class="global-head">
+          <div>
+            <h2 id="pageTitle">Dashboard</h2>
+            <p id="pageDesc">Giám sát camera realtime, quản lý phiên xe và biển số.</p>
+          </div>
+          <div class="head-actions">
+            <div class="notice" id="globalNotice">Sẵn sàng</div>
+          </div>
+        </header>
+
+        <section class="view is-active" data-view-panel="dashboard">
+          <section class="dashboard-metrics">
+            <article class="metric-card">
+              <span>Tổng camera</span>
+              <strong id="mCamerasTotal">0</strong>
+            </article>
+            <article class="metric-card">
+              <span>Camera hoạt động</span>
+              <strong id="mCamerasOn">0</strong>
+            </article>
+            <article class="metric-card">
+              <span>Xe đang gửi</span>
+              <strong id="mActive">0</strong>
+            </article>
+            <article class="metric-card">
+              <span>Xe vào hôm nay</span>
+              <strong id="mCheckin">0</strong>
+            </article>
+            <article class="metric-card">
+              <span>Xe ra hôm nay</span>
+              <strong id="mCheckout">0</strong>
+            </article>
+          </section>
+
+          <div class="view-grid">
+            <article class="panel">
+              <div class="panel-head">
+                <h3>Thêm camera mới</h3>
+              </div>
+              <form id="cameraForm" class="camera-form">
+                <input id="cameraName" name="cameraName" placeholder="Tên camera" required />
+                <input id="cameraUrl" name="cameraUrl" placeholder="rtsp:// hoặc http://" required />
+                <button type="submit">+ Thêm camera</button>
+              </form>
+            </article>
+          </div>
+
+          <article class="panel focus-panel is-hidden" id="focusPanel">
+            <div class="panel-head inline">
+              <div>
+                <h3 id="focusTitle">Camera phóng lớn</h3>
+                <p class="muted" id="focusMeta">Chọn camera để phóng lớn</p>
+              </div>
+              <div class="compact-actions">
+                <button class="ghost" id="focusFullscreenBtn" type="button">Fullscreen</button>
+                <button class="ghost" id="focusCloseBtn" type="button">Đóng</button>
+              </div>
+            </div>
+            <div class="focus-stage">
+              <canvas id="focusCanvas"></canvas>
+              <span class="placeholder" id="focusPlaceholder">Chưa chọn camera</span>
+            </div>
+          </article>
+
+          <section class="camera-grid" id="cameraGrid"></section>
+
+          <section class="tables">
+            <article class="panel">
+              <div class="panel-head">
+                <h3>Phiên gửi xe đang hoạt động</h3>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Biển số</th>
+                      <th>RFID</th>
+                      <th>Giờ vào</th>
+                    </tr>
+                  </thead>
+                  <tbody id="sessionBody"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <h3>Biển số nhận gần nhất</h3>
+              </div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Thời gian</th>
+                      <th>Camera</th>
+                      <th>Biển số</th>
+                      <th>Linked</th>
+                    </tr>
+                  </thead>
+                  <tbody id="plateBody"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-view-panel="history">
+          <section class="view-grid">
+            <article class="panel">
+              <div class="panel-head inline">
+                <h3>Lịch sử</h3>
+                <div class="compact-actions">
+                  <label>
+                    <input type="checkbox" id="historyActiveOnly" />
+                    Chỉ xe đang gửi
+                  </label>
+                  <select id="historyLimit">
+                    <option value="30">30</option>
+                    <option value="50" selected>50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                  </select>
+                  <button class="ghost" id="historyRefreshBtn" type="button">Làm mới</button>
+                </div>
+              </div>
+            </article>
+          </section>
+
+          <section class="tables">
+            <article class="panel">
+              <div class="panel-head">
+                <h3>Lịch sử phiên xe</h3>
+              </div>
+              <div class="table-wrap tall">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Biển số</th>
+                      <th>RFID</th>
+                      <th>Giờ vào</th>
+                      <th>Giờ ra</th>
+                      <th>Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody id="historySessionBody"></tbody>
+                </table>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <h3>Lịch sử nhận diện biển số</h3>
+              </div>
+              <div class="table-wrap tall">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Thời gian</th>
+                      <th>Camera</th>
+                      <th>Biển số</th>
+                      <th>Confidence</th>
+                      <th>Linked</th>
+                    </tr>
+                  </thead>
+                  <tbody id="historyPlateBody"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-view-panel="rfid">
+          <section class="view-grid two-col">
+            <article class="panel">
+              <div class="panel-head">
+                <h3>Gửi tín hiệu RFID (test)</h3>
+              </div>
+              <form id="rfidForm" class="stack-form">
+                <input id="rfidCard" placeholder="Card ID" required />
+                <select id="rfidDirection">
+                  <option value="in">in</option>
+                  <option value="out">out</option>
+                </select>
+                <input id="rfidPlate" placeholder="Biển số (optional)" />
+                <input id="rfidSource" placeholder="Source" value="web-rfid-tester" />
+                <button type="submit">Gửi sự kiện</button>
+              </form>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <h3>Kết quả RFID gần nhất</h3>
+              </div>
+              <div class="table-wrap tall">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Thời gian</th>
+                      <th>Card</th>
+                      <th>Status</th>
+                      <th>Biển số</th>
+                    </tr>
+                  </thead>
+                  <tbody id="rfidLogBody"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-view-panel="ai">
+          <section class="view-grid two-col">
+            <article class="panel">
+              <div class="panel-head">
+                <h3>Upload model AI</h3>
+              </div>
+              <form id="aiUploadForm" class="stack-form">
+                <input id="aiModelFile" type="file" accept=".pt,.onnx,.pth,.engine,.pkl,.bin" required />
+                <button type="submit">Upload model</button>
+              </form>
+              <div class="panel-content">
+                <p id="aiStatusText" class="muted"></p>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <h3>Test camera với AI</h3>
+              </div>
+              <form id="aiTestForm" class="stack-form">
+                <select id="aiCameraSelect"></select>
+                <button type="submit">Chạy test</button>
+              </form>
+              <div class="panel-content">
+                <pre class="result" id="aiTestResult">Chưa có kết quả test</pre>
+              </div>
+            </article>
+          </section>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h3>Model đã upload</h3>
+            </div>
+            <div class="panel-content">
+              <ul class="list" id="aiModelsList"></ul>
+            </div>
+          </article>
+        </section>
+
+        <section class="view" data-view-panel="user">
+          <section class="view-grid two-col">
+            <article class="panel">
+              <div class="panel-head">
+                <h3>Login</h3>
+              </div>
+              <form id="userLoginForm" class="stack-form">
+                <input id="userName" placeholder="Username" required />
+                <input id="userPassword" type="password" placeholder="Password" required />
+                <p class="login-error" id="userLoginError"></p>
+                <button type="submit">Login</button>
+              </form>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <h3>User session</h3>
+              </div>
+              <div class="panel-content">
+                <p id="userStateText" class="muted">Chưa đăng nhập.</p>
+                <button class="ghost" id="logoutBtn" type="button">Logout</button>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-view-panel="settings">
+          <article class="panel">
+            <div class="panel-head">
+              <h3>Cài đặt hệ thống</h3>
+            </div>
+            <form id="settingsForm" class="stack-form panel-content">
+              <label>
+                Refresh interval (giây)
+                <input id="refreshSeconds" type="number" min="2" max="60" value="3" required />
+              </label>
+              <label>
+                <input id="autoRefresh" type="checkbox" checked />
+                Bật tự động làm mới dữ liệu
+              </label>
+              <label>
+                API base
+                <input id="apiBaseReadonly" type="text" readonly />
+              </label>
+              <button type="submit">Lưu cài đặt</button>
+            </form>
+          </article>
+        </section>
+
+        <section class="view" data-view-panel="system">
+          <section class="view-grid two-col">
+            <article class="panel">
+              <div class="panel-head inline">
+                <h3>Health check backend</h3>
+                <button class="ghost" id="healthCheckBtn" type="button">Kiểm tra</button>
+              </div>
+              <div class="panel-content">
+                <pre class="result" id="healthResult">Chưa kiểm tra</pre>
+              </div>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head">
+                <h3>Ghi chú</h3>
+              </div>
+              <div class="panel-content muted">
+                <p>1. Dashboard chỉ mở stream khi bạn đứng ở tab Dashboard để giảm tải.</p>
+                <p>2. Model upload thành công sẽ lưu vào thư mục backend.</p>
+                <p>3. Dùng RFID Gate để test luồng vào/ra nhanh.</p>
+              </div>
+            </article>
+          </section>
+        </section>
+      </main>
+    </div>
+
+    <div class="login-gate is-hidden" id="loginGate">
+      <form class="login-card" id="loginGateForm">
+        <h3>Đăng nhập hệ thống</h3>
+        <p class="muted">Vui lòng đăng nhập để truy cập dashboard.</p>
+        <label>
+          Username
+          <input id="loginGateUsername" autocomplete="username" required />
+        </label>
+        <label>
+          Password
+          <input id="loginGatePassword" type="password" autocomplete="current-password" required />
+        </label>
+        <p class="login-error" id="loginGateError"></p>
+        <button type="submit">Đăng nhập</button>
+      </form>
+    </div>
+
+    <div class="modal is-hidden" id="cameraEditModal">
+      <div class="modal-card">
+        <div class="panel-head inline">
+          <h3>Sửa camera <span id="cameraEditCameraId"></span></h3>
+          <button class="ghost" id="cameraEditCancelBtn" type="button">Đóng</button>
+        </div>
+        <form id="cameraEditForm" class="stack-form panel-content">
+          <label>
+            Tên camera
+            <input id="cameraEditName" required />
+          </label>
+          <label>
+            Nguồn camera
+            <input id="cameraEditUrl" required />
+          </label>
+          <label class="inline-checkbox">
+            <input id="cameraEditEnabled" type="checkbox" />
+            Bật camera sau khi lưu
+          </label>
+          <div class="modal-actions">
+            <button class="ghost" id="cameraEditCloseBtn" type="button">Hủy</button>
+            <button type="submit">Lưu thay đổi</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script type="module" src="js/main.js"></script>
+  </body>
+</html>

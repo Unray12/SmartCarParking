@@ -1,0 +1,36 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.sqlite3
+*.db
+.venv/
+
+# Sensitive config / secrets
+.env
+.env.*
+!.env.example
+!backend/.env.example
+!frontend/.env.example
+backend/.env
+frontend/.env
+*.pem
+*.key
+*.crt
+secrets/
+credentials/
+
+# Node/Electron
+node_modules/
+dist/
+out/
+
+# Logs
+*.log
+
+# Local generated context snapshot
+CONTEXT_FULL_SOURCE.md
+
+# OS
+.DS_Store

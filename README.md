@@ -58,7 +58,9 @@ STREAM_PLATE_DEDUPE_SECONDS=8
 AI_MODELS_DIR=models_store
 ```
 
-## 4) Chạy hệ thống web (port backend: 8010)
+## 4) Chạy hệ thống web
+
+### 4.1 Chạy qua backend (khuyến nghị, không cần chạy frontend riêng)
 
 ```bash
 cd backend
@@ -71,6 +73,38 @@ uvicorn app.main:app --host 0.0.0.0 --port 8010 --reload
 Mở trình duyệt:
 - `http://127.0.0.1:8010` (web UI)
 - `http://127.0.0.1:8010/docs` (API docs)
+
+### 4.2 Chạy frontend standalone (phục vụ dev giao diện)
+
+Frontend là static files trong `frontend/renderer` và script start hiện tại dùng Python HTTP server.
+
+1) Chạy backend API (terminal 1):
+
+```bash
+cd backend
+source .venv/bin/activate
+uvicorn app.main:app --host 0.0.0.0 --port 8010 --reload
+```
+
+2) Chạy frontend standalone (terminal 2):
+
+```bash
+cd frontend
+npm start
+```
+
+Hoặc chạy trực tiếp không qua npm:
+
+```bash
+python3 -m http.server 5173 --directory renderer
+```
+
+3) Mở frontend:
+- `http://127.0.0.1:5173`
+
+Lưu ý:
+- `frontend/renderer/config.js` đang cấu hình `API_BASE = 'http://127.0.0.1:8010'`.
+- Nếu backend chạy port/host khác, cần sửa lại `API_BASE` cho đúng.
 
 ## 5) Menu sidebar trên UI
 

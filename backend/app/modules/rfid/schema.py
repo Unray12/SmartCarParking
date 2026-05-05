@@ -22,3 +22,26 @@ class RfidEventResult(BaseModel):
     plate: str | None = None
     card_id: str
     mismatch: bool = False
+
+
+class RfidCardCreate(BaseModel):
+    card_id: str = Field(min_length=1, max_length=64)
+    plate: str = Field(min_length=1, max_length=32)
+    owner_name: str | None = Field(default=None, max_length=128)
+
+
+class RfidCardUpdate(BaseModel):
+    plate: str | None = Field(default=None, max_length=32)
+    owner_name: str | None = Field(default=None, max_length=128)
+    is_active: bool | None = None
+
+
+class RfidCardOut(BaseModel):
+    id: int
+    card_id: str
+    plate: str
+    owner_name: str | None
+    is_active: bool
+    created_at: datetime
+
+    model_config = {"from_attributes": True}

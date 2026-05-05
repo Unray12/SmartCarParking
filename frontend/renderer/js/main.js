@@ -63,6 +63,12 @@ const els = {
   rfidSource: document.getElementById('rfidSource'),
   rfidLogBody: document.getElementById('rfidLogBody'),
 
+  rfidCardForm: document.getElementById('rfidCardForm'),
+  rfidCardId: document.getElementById('rfidCardId'),
+  rfidCardPlate: document.getElementById('rfidCardPlate'),
+  rfidCardOwner: document.getElementById('rfidCardOwner'),
+  rfidCardBody: document.getElementById('rfidCardBody'),
+
   aiUploadForm: document.getElementById('aiUploadForm'),
   aiModelFile: document.getElementById('aiModelFile'),
   aiStatusText: document.getElementById('aiStatusText'),
@@ -394,6 +400,52 @@ function renderRfidLogs() {
   }
 }
 
+async function loadRfidCards() {
+  try {
+    const cards = await api('/api/rfid/cards');
+    appState.rfidCards = cards;
+    renderRfidCards();
+  } catch (err) {
+    notify(`Load RFID cards lỗi: ${err.message}`, 'error');
+  }
+}
+
+function renderRfidCards() {
+  els.rfidCardBody.innerHTML = '';
+  if (!appState.rfidCards || !appState.rfidCards.length) {
+    els.rfidCardBody.innerHTML = '<tr><td colspan="5" class="empty">Chưa có thẻ RFID nào được đăng ký</td></tr>';
+    return;
+  }
+
+  for (const card of appState.rfidCards) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${card.card_id}</td>
+      <td>${card.plate}</td>
+      <td>${card.owner_name || '-'}</td>
+      <td>${card.is_active ? 'Hoạt động' : 'Khóa'}</td>
+      <td><button class="ghost delete-card-btn" data-card-id="${card.card_id}">Xóa</button></td>
+    `;
+    els.rfidCardBody.appendChild(tr);
+  }
+
+  // Bind delete buttons
+  const deleteBtns = els.rfidCardBody.querySelectorAll('.delete-card-btn');
+  for (const btn of deleteBtns) {
+    btn.addEventListener('click', async () => {
+      const cardId = btn.dataset.cardId;
+      if (!confirm(`Xóa thẻ ${cardId}?`)) return;
+      try {
+        await api(`/api/rfid/cards/${cardId}`, { method: 'DELETE' });
+        notify('Xóa thẻ thành công', 'success');
+        await loadRfidCards();
+      } catch (err) {
+        notify(`Xóa thẻ lỗi: ${err.message}`, 'error');
+      }
+    });
+  }
+}
+
 async function refreshAiStatus() {
   try {
     const data = await api('/api/ai/status');
@@ -475,6 +527,9 @@ function switchView(viewName) {
   }
   if (viewName === 'ai') {
     refreshAiStatus().catch((err) => notify(`AI status lỗi: ${err.message}`, 'warn'));
+  }
+  if (viewName === 'rfid') {
+    loadRfidCards().catch((err) => notify(`RFID cards lỗi: ${err.message}`, 'warn'));
   }
   if (viewName === 'system') {
     runHealthCheck(false).catch((err) => notify(`Health check lỗi: ${err.message}`, 'warn'));
@@ -610,6 +665,27 @@ function bindEvents() {
     }
   });
 
+  els.rfidCardForm.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const cardId = els.rfidCardId.value.trim();
+    const plate = els.rfidCardPlate.value.trim();
+    const owner = els.rfidCardOwner.value.trim();
+
+    if (!cardId || !plate) return;
+
+    try {
+      await api('/api/rfid/cards', {
+        method: 'POST',
+        body: JSON.stringify({ card_id: cardId, plate, owner_name: owner || null })
+      });
+      notify('Thêm thẻ RFID thành công', 'success');
+      els.rfidCardForm.reset();
+      await loadRfidCards();
+    } catch (err) {
+      notify(`Thêm thẻ lỗi: ${err.message}`, 'error');
+    }
+  });
+
   els.aiUploadForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const file = els.aiModelFile.files?.[0];
@@ -725,16 +801,11 @@ function bindEvents() {
 
 async function bootstrap() {
   loadStorage(appState);
-  if (isAuthenticated()) {
-    appState.user.username = sessionStorage.getItem(AUTH_USER_KEY) || '';
-    if (!appState.user.username) {
-      setAuthSession('');
-      showLoginGate();
-    }
-  } else {
-    appState.user.username = '';
-    showLoginGate();
-  }
+  // TEMP: deactive login - skip auth check
+  appState.user.username = 'guest';
+  setAuthSession('guest');
+  hideLoginGate();
+  // END TEMP
   applySettingsToForm();
   applySidebarUiState();
   renderUserState();

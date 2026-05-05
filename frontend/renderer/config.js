@@ -1,3 +1,3 @@
 window.__APP_CONFIG__ = {
-  API_BASE: 'http://127.0.0.1:8010'
+  API_BASE: 'http://172.28.182.165:8010'
 };

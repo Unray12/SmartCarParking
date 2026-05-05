@@ -33,7 +33,7 @@
           <button class="nav-item" data-view="history">History</button>
           <button class="nav-item" data-view="rfid">RFID Gate</button>
           <button class="nav-item" data-view="ai">AI Center</button>
-          <button class="nav-item" data-view="user">User</button>
+          <button class="nav-item" data-view="user" style="display:none">User</button>
           <button class="nav-item" data-view="settings">Settings</button>
           <button class="nav-item" data-view="system">System</button>
         </nav>
@@ -243,6 +243,34 @@
 
             <article class="panel">
               <div class="panel-head">
+                <h3>Quản lý thẻ RFID</h3>
+              </div>
+              <form id="rfidCardForm" class="stack-form">
+                <input id="rfidCardId" placeholder="Card ID (VD: 8E:68:B9:06)" required />
+                <input id="rfidCardPlate" placeholder="Biển số xe" required />
+                <input id="rfidCardOwner" placeholder="Tên chủ xe (tùy chọn)" />
+                <button type="submit">Thêm thẻ mới</button>
+              </form>
+              <div class="table-wrap tall" style="margin-top:12px">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Card ID</th>
+                      <th>Biển số</th>
+                      <th>Chủ xe</th>
+                      <th>Trạng thái</th>
+                      <th>Xóa</th>
+                    </tr>
+                  </thead>
+                  <tbody id="rfidCardBody"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+
+          <section class="view-grid">
+            <article class="panel">
+              <div class="panel-head">
                 <h3>Kết quả RFID gần nhất</h3>
               </div>
               <div class="table-wrap tall">
@@ -377,7 +405,7 @@
       </main>
     </div>
 
-    <div class="login-gate is-hidden" id="loginGate">
+    <div class="login-gate is-hidden" id="loginGate" style="display:none">
       <form class="login-card" id="loginGateForm">
         <h3>Đăng nhập hệ thống</h3>
         <p class="muted">Vui lòng đăng nhập để truy cập dashboard.</p>

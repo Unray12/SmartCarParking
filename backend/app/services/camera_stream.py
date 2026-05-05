@@ -62,9 +62,13 @@ class CameraWorker:
             return self._latest_jpeg, self._latest_ts
 
     def _open_capture(self):
-        cap = cv2.VideoCapture(self.source_url, cv2.CAP_FFMPEG)
+        source = self.source_url
+        if source.startswith('rtsp://'):
+            source = source + '?rtsp_transport=tcp' if '?' not in source else source.replace('?', '?rtsp_transport=tcp&')
+        cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         cap.set(cv2.CAP_PROP_FPS, self._config.target_fps)
+        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
         return cap
 
     def _resize_if_needed(self, frame):
@@ -91,7 +95,11 @@ class CameraWorker:
                     time.sleep(1.0)
                     continue
 
-            ok, frame = cap.read()
+            # Flush old frames to reduce latency
+            for _ in range(2):
+                cap.grab()
+
+            ok, frame = cap.retrieve() if hasattr(cap, 'retrieve') else cap.read()
             if not ok or frame is None:
                 cap.release()
                 cap = None
@@ -102,7 +110,10 @@ class CameraWorker:
             encoded_ok, jpeg = cv2.imencode(
                 ".jpg",
                 frame,
-                [int(cv2.IMWRITE_JPEG_QUALITY), self._config.jpeg_quality],
+                [
+                    int(cv2.IMWRITE_JPEG_QUALITY), self._config.jpeg_quality,
+                    int(cv2.IMWRITE_JPEG_OPTIMIZE), 0  # Skip optimization for speed
+                ],
             )
             if encoded_ok:
                 jpeg_bytes = jpeg.tobytes()
@@ -118,7 +129,8 @@ class CameraWorker:
 
             frame_counter += 1
             elapsed = time.time() - loop_started
-            sleep_s = max(0.0, (1.0 / self._config.target_fps) - elapsed)
+            # Minimal sleep for max throughput
+            sleep_s = max(0.001, (1.0 / self._config.target_fps) - elapsed)
             if sleep_s > 0:
                 time.sleep(sleep_s)
 

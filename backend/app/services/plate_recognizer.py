@@ -35,22 +35,33 @@ def normalize_plate(raw: str) -> str:
 def load_plate_recognizer(spec: str | None = None) -> PlateRecognizer:
     """
     Load custom recognizer by env `PLATE_RECOGNIZER` using format `module.path:ClassName`.
-    Fallback: DummyPlateRecognizer.
+    Fallback: try PaddlePlateRecognizer, then DummyPlateRecognizer.
     """
     if spec is None:
         spec = os.getenv("PLATE_RECOGNIZER", "")
     spec = spec.strip()
-    if not spec:
-        return DummyPlateRecognizer()
 
+    # If spec is provided, try to load it (for PaddlePlateRecognizer)
+    if spec:
+        try:
+            module_name, class_name = spec.split(":", 1)
+            module = importlib.import_module(module_name)
+            cls = getattr(module, class_name)
+            recognizer = cls()
+            if not hasattr(recognizer, "detect"):
+                raise TypeError("Recognizer must implement detect(frame_bgr)")
+            print(f"[INFO] Loaded recognizer: {spec}")
+            return recognizer
+        except Exception as exc:
+            print(f"[WARN] Cannot load recognizer '{spec}': {exc}. Trying PaddleOCR...")
+            # Fall through to auto-try
+
+    # Auto-try PaddleOCR
     try:
-        module_name, class_name = spec.split(":", 1)
-        module = importlib.import_module(module_name)
-        cls = getattr(module, class_name)
-        recognizer = cls()
-        if not hasattr(recognizer, "detect"):
-            raise TypeError("Recognizer must implement detect(frame_bgr)")
+        from app.services.paddle_plate_recognizer import PaddlePlateRecognizer
+        recognizer = PaddlePlateRecognizer()
+        print("[INFO] Loaded PaddlePlateRecognizer")
         return recognizer
     except Exception as exc:
-        print(f"[WARN] Cannot load recognizer '{spec}': {exc}. Using DummyPlateRecognizer.")
+        print(f"[WARN] Cannot load PaddlePlateRecognizer: {exc}. Using DummyPlateRecognizer.")
         return DummyPlateRecognizer()

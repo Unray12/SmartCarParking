@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     stream_plate_dedupe_seconds: int = 8
     ai_models_dir: str = "models_store"
 
+    # RFID USB Serial
+    rfid_usb_port: str = "/dev/ttyUSB0"
+    rfid_usb_baudrate: int = 9600
+    rfid_usb_enabled: bool = True
+
     model_config = SettingsConfigDict(
         env_file=BACKEND_ROOT / ".env",
         env_file_encoding="utf-8",

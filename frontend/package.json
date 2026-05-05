@@ -5,6 +5,6 @@
   "private": true,
   "description": "Smart parking web dashboard",
   "scripts": {
-    "start": "python3 -m http.server 5173 --directory renderer"
+    "start": "python3 -m http.server 5173 --bind 172.28.182.165 --directory renderer"
   }
 }

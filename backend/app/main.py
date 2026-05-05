@@ -12,10 +12,36 @@ from app.database.session import SessionLocal, init_db
 from app.modules.router import api_router
 from app.services.camera_stream import CameraStreamManager, StreamConfig
 from app.services.plate_recognizer import load_plate_recognizer
+from app.services.rfid_usb_reader import RfidUsbConfig, RfidUsbReader
+from app.modules.rfid.service import ingest_rfid_event, find_plate_by_card
+from app.modules.rfid.schema import RfidEventIn
+from datetime import datetime
 
 settings = get_settings()
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = PROJECT_ROOT / "frontend" / "renderer"
+
+
+def _handle_rfid_from_usb(direction: str, card_id: str) -> None:
+    try:
+        with SessionLocal() as db:
+            # Auto-link plate from RFID card mapping
+            plate = None
+            from app.modules.rfid.service import find_plate_by_card
+            plate = find_plate_by_card(card_id)
+
+            payload = RfidEventIn(
+                card_id=card_id,
+                direction=direction,
+                plate=plate,  # Auto-filled from RFID card mapping
+                source="usb-rfid-reader",
+                occurred_at=datetime.utcnow(),
+                data={"from": "usb_serial"},
+            )
+            result = ingest_rfid_event(db, payload)
+            print(f"[RFID USB] {direction.upper()}: {card_id} → {result.status} (plate={result.plate})")
+    except Exception as exc:
+        print(f"[RFID USB] Error processing {card_id}: {exc}")
 
 
 @asynccontextmanager
@@ -39,7 +65,19 @@ async def lifespan(app: FastAPI):
     app.state.camera_manager = camera_manager
 
     camera_manager.bootstrap_enabled_cameras()
+
+    rfid_config = RfidUsbConfig(
+        port=settings.rfid_usb_port,
+        baudrate=settings.rfid_usb_baudrate,
+        enabled=settings.rfid_usb_enabled,
+    )
+    rfid_reader = RfidUsbReader(rfid_config, _handle_rfid_from_usb)
+    rfid_reader.start()
+    app.state.rfid_reader = rfid_reader
+
     yield
+
+    rfid_reader.stop()
     camera_manager.shutdown()
 
 

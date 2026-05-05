@@ -38,6 +38,7 @@ export const appState = {
   cameras: [],
   focusedCameraId: null,
   rfidLogs: [],
+  rfidCards: [],
   user: {
     username: ''
   },

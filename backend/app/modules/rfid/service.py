@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.modules.plates.model import PlateRead
-from app.modules.rfid.model import RfidEvent
-from app.modules.rfid.schema import RfidEventIn, RfidEventResult
+from app.modules.rfid.model import RfidCard, RfidEvent
+from app.modules.rfid.schema import RfidCardCreate, RfidCardOut, RfidCardUpdate, RfidEventIn, RfidEventResult
 from app.modules.sessions.model import ParkingSession
 from app.services.plate_recognizer import normalize_plate
 
@@ -95,6 +95,7 @@ def _handle_check_in(db: Session, payload: RfidEventIn, occurred_at: datetime) -
 
     db.commit()
     db.refresh(session)
+    print(f"[RFID EVENT] Car IN: card={payload.card_id}, plate={normalized_plate}")
     return RfidEventResult(
         status="checked_in",
         message="Vehicle checked in successfully",
@@ -132,6 +133,8 @@ def _handle_check_out(db: Session, payload: RfidEventIn, occurred_at: datetime) 
     db.add(active_session)
     db.commit()
 
+    print(f"[RFID EVENT] Car OUT: card={payload.card_id}, plate={active_session.plate}")
+
     return RfidEventResult(
         status="checked_out",
         message="Vehicle checked out successfully",
@@ -149,3 +152,60 @@ def ingest_rfid_event(db: Session, payload: RfidEventIn) -> RfidEventResult:
         return _handle_check_in(db, payload, occurred_at)
 
     return _handle_check_out(db, payload, occurred_at)
+
+
+# ---- RfidCard CRUD ----
+def list_rfid_cards(db: Session) -> list[RfidCard]:
+    return db.scalars(select(RfidCard).order_by(RfidCard.id.desc())).all()
+
+
+def get_rfid_card(db: Session, card_id: str) -> RfidCard | None:
+    return db.scalar(select(RfidCard).where(RfidCard.card_id == card_id))
+
+
+def create_rfid_card(db: Session, payload: RfidCardCreate) -> RfidCard:
+    card = RfidCard(
+        card_id=payload.card_id,
+        plate=payload.plate,
+        owner_name=payload.owner_name,
+        is_active=True,
+    )
+    db.add(card)
+    db.commit()
+    db.refresh(card)
+    return card
+
+
+def update_rfid_card(db: Session, card_id: str, payload: RfidCardUpdate) -> RfidCard | None:
+    card = get_rfid_card(db, card_id)
+    if not card:
+        return None
+    if payload.plate is not None:
+        card.plate = payload.plate
+    if payload.owner_name is not None:
+        card.owner_name = payload.owner_name
+    if payload.is_active is not None:
+        card.is_active = payload.is_active
+    db.add(card)
+    db.commit()
+    db.refresh(card)
+    return card
+
+
+def delete_rfid_card(db: Session, card_id: str) -> bool:
+    card = get_rfid_card(db, card_id)
+    if not card:
+        return False
+    db.delete(card)
+    db.commit()
+    return True
+
+
+def find_plate_by_card(card_id: str) -> str | None:
+    from app.database.session import SessionLocal
+
+    with SessionLocal() as db:
+        card = get_rfid_card(db, card_id)
+        if card and card.is_active:
+            return card.plate
+    return None

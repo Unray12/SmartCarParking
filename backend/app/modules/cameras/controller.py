@@ -75,6 +75,6 @@ async def ws_camera_stream(websocket: WebSocket, camera_id: int) -> None:
             if frame and frame_ts > last_ts:
                 await websocket.send_bytes(frame)
                 last_ts = frame_ts
-            await asyncio.sleep(0.03)
+            await asyncio.sleep(0.01)  # Reduced from 0.03 to 0.01 for lower latency
     except WebSocketDisconnect:
         return

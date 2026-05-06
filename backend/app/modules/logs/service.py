@@ -11,6 +11,17 @@ from app.modules.rfid.model import RfidEvent
 from app.modules.sessions.model import ParkingSession
 
 
+def _to_snapshot_url(path: str | None) -> str | None:
+    if not path:
+        return None
+    parts = path.replace("\\", "/").split("/")
+    if len(parts) < 2:
+        return None
+    folder = parts[-2]
+    filename = parts[-1]
+    return f"/api/snapshots/files/{folder}/{filename}"
+
+
 def get_recent_logs(db: Session, limit: int = 100, hours: int = 24) -> list[LogEntry]:
     since = datetime.utcnow() - timedelta(hours=hours)
     logs: list[LogEntry] = []
@@ -55,7 +66,15 @@ def get_recent_logs(db: Session, limit: int = 100, hours: int = 24) -> list[LogE
                 timestamp=s.entry_time,
                 log_type=LogType.SESSION_IN,
                 message=f"XE VÀO: {s.plate}, RFID={s.rfid_card}",
-                details={"session_id": s.id, "plate": s.plate, "rfid_card": s.rfid_card, "camera_id": s.entry_camera_id},
+                details={
+                    "session_id": s.id,
+                    "plate": s.plate,
+                    "rfid_card": s.rfid_card,
+                    "camera_id": s.entry_camera_id,
+                    "lot_id": s.lot_id,
+                    "entry_snapshot_path": s.entry_snapshot_path,
+                    "entry_snapshot_url": _to_snapshot_url(s.entry_snapshot_path),
+                },
             )
         )
         if s.exit_time:
@@ -64,7 +83,16 @@ def get_recent_logs(db: Session, limit: int = 100, hours: int = 24) -> list[LogE
                     timestamp=s.exit_time,
                     log_type=LogType.SESSION_OUT,
                     message=f"XE RA: {s.plate}, RFID={s.rfid_card}",
-                    details={"session_id": s.id, "plate": s.plate, "rfid_card": s.rfid_card},
+                    details={
+                        "session_id": s.id,
+                        "plate": s.plate,
+                        "rfid_card": s.rfid_card,
+                        "lot_id": s.lot_id,
+                        "entry_snapshot_path": s.entry_snapshot_path,
+                        "entry_snapshot_url": _to_snapshot_url(s.entry_snapshot_path),
+                        "exit_snapshot_path": s.exit_snapshot_path,
+                        "exit_snapshot_url": _to_snapshot_url(s.exit_snapshot_path),
+                    },
                 )
             )
 

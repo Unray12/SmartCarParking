@@ -54,6 +54,7 @@ async def lifespan(app: FastAPI):
         target_fps=settings.stream_target_fps,
         jpeg_quality=settings.stream_jpeg_quality,
         max_width=settings.stream_max_width,
+        capture_skip_grabs=settings.stream_capture_skip_grabs,
         infer_every_n_frames=settings.stream_infer_every_n_frames,
         plate_dedupe_seconds=settings.stream_plate_dedupe_seconds,
         enable_inference=settings.stream_enable_inference,
@@ -65,6 +66,7 @@ async def lifespan(app: FastAPI):
         config=stream_config,
     )
     app.state.camera_manager = camera_manager
+    app.state.stream_ws_target_fps = settings.stream_ws_target_fps
     global _CAMERA_MANAGER
     _CAMERA_MANAGER = camera_manager
 

@@ -104,6 +104,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
   function syncFocusedCamera() {
     for (const [id, view] of cameraViews.entries()) {
       view.setFocused(state.focusedCameraId === id);
+      view.setFocusStreamPaused(state.focusedCameraId === id && state.currentView === 'dashboard');
     }
 
     const focused = findCameraById(state.focusedCameraId);
@@ -224,7 +225,8 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       ws: null,
       pendingFrame: null,
       decoding: false,
-      paused: false
+      paused: false,
+      pausedForFocus: false
     };
 
     function renderHeader(next) {
@@ -269,7 +271,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     }
 
     function openSocket(cameraId) {
-      if (local.paused || state.currentView !== 'dashboard') return;
+      if (local.paused || local.pausedForFocus || state.currentView !== 'dashboard') return;
 
       closeSocket();
       const ws = new WebSocket(`${WS_BASE}/ws/cameras/${cameraId}`);
@@ -281,7 +283,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       };
 
       ws.onclose = () => {
-        if (camera.enabled && !local.paused && state.currentView === 'dashboard') {
+        if (camera.enabled && !local.paused && !local.pausedForFocus && state.currentView === 'dashboard') {
           setTimeout(() => openSocket(cameraId), 1000);
         }
       };
@@ -353,7 +355,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
           return;
         }
 
-        if (!local.paused && state.currentView === 'dashboard' && !local.ws) {
+        if (!local.paused && !local.pausedForFocus && state.currentView === 'dashboard' && !local.ws) {
           openSocket(camera.id);
         }
       },
@@ -363,7 +365,17 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       },
       resume() {
         local.paused = false;
-        if (camera.enabled && !local.ws) {
+        if (camera.enabled && !local.pausedForFocus && !local.ws) {
+          openSocket(camera.id);
+        }
+      },
+      setFocusStreamPaused(pausedForFocus) {
+        local.pausedForFocus = pausedForFocus;
+        if (pausedForFocus) {
+          closeSocket();
+          return;
+        }
+        if (!local.paused && camera.enabled && state.currentView === 'dashboard' && !local.ws) {
           openSocket(camera.id);
         }
       },
@@ -438,7 +450,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
   }
 
   function init() {
-    els.focusCanvas.width = 1600;
+    els.focusCanvas.width = 1280;
     els.focusCanvas.height = 720;
     renderFocusHeader();
 

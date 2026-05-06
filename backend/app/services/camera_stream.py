@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import threading
 import time
+from queue import Empty, Full, Queue
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
@@ -21,6 +22,7 @@ class StreamConfig:
     max_width: int = 1280
     infer_every_n_frames: int = 6
     plate_dedupe_seconds: int = 8
+    enable_inference: bool = True
 
 
 class CameraWorker:
@@ -43,19 +45,26 @@ class CameraWorker:
         self._latest_ts: float = 0.0
         self._running = threading.Event()
         self._thread: threading.Thread | None = None
+        self._infer_thread: threading.Thread | None = None
+        self._infer_queue: Queue[np.ndarray] = Queue(maxsize=1)
 
     def start(self) -> None:
         if self._thread and self._thread.is_alive():
             return
         self._running.set()
         self._thread = threading.Thread(target=self._run, daemon=True)
+        self._infer_thread = threading.Thread(target=self._infer_loop, daemon=True)
         self._thread.start()
+        self._infer_thread.start()
 
     def stop(self) -> None:
         self._running.clear()
         if self._thread and self._thread.is_alive():
             self._thread.join(timeout=2)
+        if self._infer_thread and self._infer_thread.is_alive():
+            self._infer_thread.join(timeout=2)
         self._thread = None
+        self._infer_thread = None
 
     def latest_frame(self) -> tuple[bytes | None, float]:
         with self._lock:
@@ -95,11 +104,7 @@ class CameraWorker:
                     time.sleep(1.0)
                     continue
 
-            # Flush old frames to reduce latency
-            for _ in range(2):
-                cap.grab()
-
-            ok, frame = cap.retrieve() if hasattr(cap, 'retrieve') else cap.read()
+            ok, frame = cap.read()
             if not ok or frame is None:
                 cap.release()
                 cap = None
@@ -122,10 +127,8 @@ class CameraWorker:
                     self._latest_jpeg = jpeg_bytes
                     self._latest_ts = now_ts
 
-                if frame_counter % max(self._config.infer_every_n_frames, 1) == 0:
-                    detections = self._recognizer.detect(frame)
-                    if detections:
-                        self._on_detection(self.camera_id, detections)
+                if self._config.enable_inference and self._config.infer_every_n_frames > 0 and frame_counter % self._config.infer_every_n_frames == 0:
+                    self._submit_infer_frame(frame)
 
             frame_counter += 1
             elapsed = time.time() - loop_started
@@ -136,6 +139,39 @@ class CameraWorker:
 
         if cap is not None:
             cap.release()
+
+    def _submit_infer_frame(self, frame: np.ndarray) -> None:
+        # Keep only the newest frame for inference to avoid backlog.
+        frame_copy = frame.copy()
+        try:
+            self._infer_queue.put_nowait(frame_copy)
+            return
+        except Full:
+            pass
+
+        try:
+            _ = self._infer_queue.get_nowait()
+        except Empty:
+            pass
+
+        try:
+            self._infer_queue.put_nowait(frame_copy)
+        except Full:
+            return
+
+    def _infer_loop(self) -> None:
+        while self._running.is_set():
+            try:
+                frame = self._infer_queue.get(timeout=0.5)
+            except Empty:
+                continue
+
+            try:
+                detections = self._recognizer.detect(frame)
+                if detections:
+                    self._on_detection(self.camera_id, detections)
+            except Exception:
+                continue
 
 
 class CameraStreamManager:

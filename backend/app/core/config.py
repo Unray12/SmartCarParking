@@ -17,16 +17,18 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
     plate_recognizer: str = ""
 
-    stream_target_fps: int = 20
-    stream_jpeg_quality: int = 78
-    stream_max_width: int = 1280
-    stream_infer_every_n_frames: int = 6
+    stream_target_fps: int = 12
+    stream_jpeg_quality: int = 68
+    stream_max_width: int = 854
+    stream_infer_every_n_frames: int = 0
+    stream_enable_inference: bool = False
     stream_plate_dedupe_seconds: int = 8
     ai_models_dir: str = "models_store"
 
     # RFID USB Serial
     rfid_usb_port: str = "/dev/ttyUSB0"
-    rfid_usb_baudrate: int = 9600
+    rfid_usb_baudrate: int = 115200
+    rfid_usb_queue_max_size: int = 500
     rfid_usb_enabled: bool = True
 
     model_config = SettingsConfigDict(

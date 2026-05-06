@@ -7,6 +7,10 @@ export const VIEW_META = {
     title: 'History',
     desc: 'Tra cứu lịch sử vào/ra và dữ liệu nhận diện biển số.'
   },
+  logs: {
+    title: 'Logs',
+    desc: 'Theo dõi log RFID, nhận diện biển số và sự kiện xe vào/ra theo thời gian thực.'
+  },
   rfid: {
     title: 'RFID Gate',
     desc: 'Mô phỏng hoặc gửi sự kiện RFID qua HTTP để test luồng vào/ra.'

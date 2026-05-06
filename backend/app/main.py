@@ -55,6 +55,7 @@ async def lifespan(app: FastAPI):
         max_width=settings.stream_max_width,
         infer_every_n_frames=settings.stream_infer_every_n_frames,
         plate_dedupe_seconds=settings.stream_plate_dedupe_seconds,
+        enable_inference=settings.stream_enable_inference,
     )
 
     camera_manager = CameraStreamManager(
@@ -69,6 +70,7 @@ async def lifespan(app: FastAPI):
     rfid_config = RfidUsbConfig(
         port=settings.rfid_usb_port,
         baudrate=settings.rfid_usb_baudrate,
+        queue_max_size=settings.rfid_usb_queue_max_size,
         enabled=settings.rfid_usb_enabled,
     )
     rfid_reader = RfidUsbReader(rfid_config, _handle_rfid_from_usb)

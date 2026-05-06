@@ -31,6 +31,7 @@
         <nav class="side-nav" id="sideNav">
           <button class="nav-item is-active" data-view="dashboard">Dashboard</button>
           <button class="nav-item" data-view="history">History</button>
+          <button class="nav-item" data-view="logs">Logs</button>
           <button class="nav-item" data-view="rfid">RFID Gate</button>
           <button class="nav-item" data-view="ai">AI Center</button>
           <button class="nav-item" data-view="user" style="display:none">User</button>
@@ -217,6 +218,54 @@
                     </tr>
                   </thead>
                   <tbody id="historyPlateBody"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <section class="view" data-view-panel="logs">
+          <section class="view-grid">
+            <article class="panel">
+              <div class="panel-head inline">
+                <h3>Nhật ký sự kiện hệ thống</h3>
+                <div class="compact-actions">
+                  <label>
+                    Khoảng thời gian
+                    <select id="logHours">
+                      <option value="1">1h</option>
+                      <option value="6">6h</option>
+                      <option value="12">12h</option>
+                      <option value="24" selected>24h</option>
+                      <option value="72">72h</option>
+                    </select>
+                  </label>
+                  <label>
+                    Số bản ghi
+                    <select id="logLimit">
+                      <option value="50">50</option>
+                      <option value="100" selected>100</option>
+                      <option value="200">200</option>
+                      <option value="500">500</option>
+                    </select>
+                  </label>
+                  <label>
+                    <input type="checkbox" id="logAutoRefresh" checked />
+                    Auto refresh
+                  </label>
+                  <button class="ghost" id="logRefreshBtn" type="button">Làm mới</button>
+                </div>
+              </div>
+              <div class="table-wrap tall">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Thời gian</th>
+                      <th>Loại</th>
+                      <th>Nội dung</th>
+                    </tr>
+                  </thead>
+                  <tbody id="logBody"></tbody>
                 </table>
               </div>
             </article>

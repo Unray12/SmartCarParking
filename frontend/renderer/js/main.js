@@ -1,6 +1,7 @@
 import { api, API_BASE } from './api.js';
 import { appState, VIEW_META, loadStorage, saveSettings } from './state.js';
 import { createCameraModule } from './camera.js';
+import { createLogModule } from './logs.js';
 
 const els = {
   appShell: document.getElementById('appShell'),
@@ -55,6 +56,11 @@ const els = {
   historyRefreshBtn: document.getElementById('historyRefreshBtn'),
   historySessionBody: document.getElementById('historySessionBody'),
   historyPlateBody: document.getElementById('historyPlateBody'),
+  logHours: document.getElementById('logHours'),
+  logLimit: document.getElementById('logLimit'),
+  logAutoRefresh: document.getElementById('logAutoRefresh'),
+  logRefreshBtn: document.getElementById('logRefreshBtn'),
+  logBody: document.getElementById('logBody'),
 
   rfidForm: document.getElementById('rfidForm'),
   rfidCard: document.getElementById('rfidCard'),
@@ -400,6 +406,35 @@ function renderRfidLogs() {
   }
 }
 
+async function refreshRfidEventLogs() {
+  try {
+    const logs = await api('/api/logs?hours=24&limit=50');
+    const mapped = [];
+
+    for (const row of logs) {
+      if (row.type !== 'rfid_in' && row.type !== 'rfid_out' && row.type !== 'session_in' && row.type !== 'session_out') {
+        continue;
+      }
+
+      mapped.push({
+        at: row.timestamp,
+        card_id: row.details?.card_id || row.details?.rfid_card || '-',
+        status: row.type,
+        plate: row.details?.plate || '-',
+      });
+
+      if (mapped.length >= 30) break;
+    }
+
+    appState.rfidLogs = mapped;
+    renderRfidLogs();
+  } catch (err) {
+    if (appState.currentView === 'rfid') {
+      notify(`RFID logs lỗi: ${err.message}`, 'warn');
+    }
+  }
+}
+
 async function loadRfidCards() {
   try {
     const cards = await api('/api/rfid/cards');
@@ -501,6 +536,7 @@ const cameraModule = createCameraModule({
   onCameraMutated,
   onCamerasUpdated
 });
+const logModule = createLogModule({ els, state: appState, notify });
 
 function switchView(viewName) {
   if (!VIEW_META[viewName]) return;
@@ -530,10 +566,12 @@ function switchView(viewName) {
   }
   if (viewName === 'rfid') {
     loadRfidCards().catch((err) => notify(`RFID cards lỗi: ${err.message}`, 'warn'));
+    refreshRfidEventLogs().catch((err) => notify(`RFID logs lỗi: ${err.message}`, 'warn'));
   }
   if (viewName === 'system') {
     runHealthCheck(false).catch((err) => notify(`Health check lỗi: ${err.message}`, 'warn'));
   }
+  logModule.onViewChange(viewName);
 }
 
 function resetPolling() {
@@ -562,6 +600,9 @@ function resetPolling() {
     }
     if (appState.currentView === 'ai') {
       refreshAiStatus().catch(console.error);
+    }
+    if (appState.currentView === 'rfid') {
+      refreshRfidEventLogs().catch(console.error);
     }
   }, ms);
 
@@ -660,6 +701,7 @@ function bindEvents() {
 
       els.rfidPlate.value = '';
       await onCameraMutated();
+      await refreshRfidEventLogs();
     } catch (err) {
       notify(`RFID lỗi: ${err.message}`, 'error');
     }
@@ -811,6 +853,7 @@ async function bootstrap() {
   renderUserState();
   bindEvents();
   cameraModule.init();
+  logModule.init();
   renderRfidLogs();
 
   try {
@@ -820,7 +863,8 @@ async function bootstrap() {
       refreshActiveSessions(),
       refreshRecentPlates(),
       refreshHistory(),
-      refreshAiStatus()
+      refreshAiStatus(),
+      refreshRfidEventLogs()
     ]);
     await runHealthCheck(false);
     notify('Kết nối backend thành công', 'success');

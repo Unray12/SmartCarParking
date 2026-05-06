@@ -182,6 +182,49 @@ textarea {
   font-size: 0.8rem;
 }
 
+.log-type .badge {
+  border-color: transparent;
+  background: #1a2a3f;
+  color: #d6e6f8;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 4px 8px;
+}
+
+.log-time {
+  white-space: nowrap;
+}
+
+.log-msg {
+  color: #d7e6f5;
+}
+
+.log-rfid-in .badge {
+  background: rgba(32, 201, 151, 0.18);
+  color: #9af0d3;
+}
+
+.log-rfid-out .badge {
+  background: rgba(255, 107, 107, 0.2);
+  color: #ffb8b8;
+}
+
+.log-plate .badge {
+  background: rgba(47, 128, 237, 0.2);
+  color: #acd0ff;
+}
+
+.log-session-in .badge,
+.log-session-out .badge {
+  background: rgba(89, 168, 255, 0.18);
+  color: #c7e1ff;
+}
+
+.log-camera .badge {
+  background: rgba(255, 216, 122, 0.2);
+  color: #ffe2a0;
+}
+
 .content {
   padding: 18px;
 }

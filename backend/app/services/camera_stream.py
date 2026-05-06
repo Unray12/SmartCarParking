@@ -17,8 +17,8 @@ from app.services.plate_recognizer import PlateDetection, PlateRecognizer, norma
 
 @dataclass
 class StreamConfig:
-    target_fps: int = 20
-    jpeg_quality: int = 78
+    target_fps: int = 15
+    jpeg_quality: int = 70
     max_width: int = 1280
     infer_every_n_frames: int = 6
     plate_dedupe_seconds: int = 8
@@ -75,9 +75,8 @@ class CameraWorker:
         if source.startswith('rtsp://'):
             source = source + '?rtsp_transport=tcp' if '?' not in source else source.replace('?', '?rtsp_transport=tcp&')
         cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
         cap.set(cv2.CAP_PROP_FPS, self._config.target_fps)
-        cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'H264'))
         return cap
 
     def _resize_if_needed(self, frame):

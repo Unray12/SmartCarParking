@@ -11,6 +11,7 @@ class RfidEventIn(BaseModel):
     direction: Literal["in", "out"]
     plate: str | None = Field(default=None, max_length=32)
     source: str = Field(default="http-device", max_length=64)
+    lot_id: int | None = None
     occurred_at: datetime | None = None
     data: dict[str, Any] = Field(default_factory=dict)
 
@@ -21,6 +22,8 @@ class RfidEventResult(BaseModel):
     session_id: int | None = None
     plate: str | None = None
     card_id: str
+    lot_id: int | None = None
+    snapshot_path: str | None = None
     mismatch: bool = False
 
 

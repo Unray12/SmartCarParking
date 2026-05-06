@@ -32,6 +32,7 @@
           <button class="nav-item is-active" data-view="dashboard">Dashboard</button>
           <button class="nav-item" data-view="history">History</button>
           <button class="nav-item" data-view="logs">Logs</button>
+          <button class="nav-item" data-view="parking">Parking Lots</button>
           <button class="nav-item" data-view="rfid">RFID Gate</button>
           <button class="nav-item" data-view="ai">AI Center</button>
           <button class="nav-item" data-view="user" style="display:none">User</button>
@@ -272,6 +273,142 @@
           </section>
         </section>
 
+        <section class="view" data-view-panel="parking">
+          <section class="view-grid two-col">
+            <article class="panel">
+              <div class="panel-head">
+                <h3 id="lotFormTitle">Tạo bãi xe</h3>
+              </div>
+              <form id="lotForm" class="stack-form">
+                <input id="lotEditId" type="hidden" />
+                <input id="lotName" placeholder="Tên bãi xe" required />
+                <label>
+                  Camera cổng vào
+                  <select id="lotEntryCamera"></select>
+                </label>
+                <label>
+                  Camera cổng ra
+                  <select id="lotExitCamera"></select>
+                </label>
+                <label class="inline-checkbox">
+                  <input id="lotIsActive" type="checkbox" checked />
+                  Kích hoạt bãi xe
+                </label>
+                <div class="compact-actions">
+                  <button id="lotSubmitBtn" type="submit">Lưu bãi xe</button>
+                  <button class="ghost" id="lotCancelEditBtn" type="button">Hủy sửa</button>
+                </div>
+              </form>
+            </article>
+
+            <article class="panel">
+              <div class="panel-head inline">
+                <h3>Ảnh chụp vào/ra</h3>
+                <div class="compact-actions">
+                  <select id="snapshotLotFilter"></select>
+                  <button class="ghost" id="snapshotRefreshBtn" type="button">Làm mới</button>
+                </div>
+              </div>
+              <div class="table-wrap tall">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Thời gian</th>
+                      <th>Bãi</th>
+                      <th>Hướng</th>
+                      <th>Biển số</th>
+                      <th>RFID</th>
+                      <th>Camera</th>
+                      <th>Ảnh</th>
+                    </tr>
+                  </thead>
+                  <tbody id="snapshotBody"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+
+          <article class="panel">
+            <div class="panel-head">
+              <h3>Danh sách bãi xe</h3>
+            </div>
+            <div class="table-wrap tall">
+              <table>
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Tên bãi</th>
+                    <th>Cam vào</th>
+                    <th>Cam ra</th>
+                    <th>Trạng thái</th>
+                    <th>Quản lý</th>
+                    <th>Sửa</th>
+                    <th>Xóa</th>
+                  </tr>
+                </thead>
+                <tbody id="lotBody"></tbody>
+              </table>
+            </div>
+          </article>
+
+          <article class="panel">
+            <div class="panel-head inline">
+              <h3 id="lotDetailTitle">Chi tiết bãi xe</h3>
+              <button class="ghost" id="lotDetailCloseBtn" type="button">Đóng</button>
+            </div>
+            <div class="panel-content">
+              <p class="muted" id="lotDetailMeta">Chọn bãi xe từ danh sách để xem dữ liệu riêng.</p>
+            </div>
+
+            <section class="view-grid two-col panel-content">
+              <article class="panel">
+                <div class="panel-head"><h3>Live cam vào</h3></div>
+                <div class="preview">
+                  <canvas id="lotEntryCanvas"></canvas>
+                  <span class="placeholder" id="lotEntryPlaceholder">Chưa có camera vào</span>
+                </div>
+              </article>
+              <article class="panel">
+                <div class="panel-head"><h3>Live cam ra</h3></div>
+                <div class="preview">
+                  <canvas id="lotExitCanvas"></canvas>
+                  <span class="placeholder" id="lotExitPlaceholder">Chưa có camera ra</span>
+                </div>
+              </article>
+            </section>
+
+            <section class="view-grid two-col panel-content">
+              <article class="panel">
+                <div class="panel-head"><h3>Ảnh capture vào mới nhất</h3></div>
+                <div class="panel-content">
+                  <img id="lotEntryCaptureImg" alt="entry capture" style="width:100%;max-height:260px;object-fit:contain;border:1px solid var(--line-soft);border-radius:8px;background:#050b11" />
+                </div>
+              </article>
+              <article class="panel">
+                <div class="panel-head"><h3>Ảnh capture ra mới nhất</h3></div>
+                <div class="panel-content">
+                  <img id="lotExitCaptureImg" alt="exit capture" style="width:100%;max-height:260px;object-fit:contain;border:1px solid var(--line-soft);border-radius:8px;background:#050b11" />
+                </div>
+              </article>
+            </section>
+
+            <div class="table-wrap tall panel-content">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Thời gian</th>
+                    <th>Hướng</th>
+                    <th>Biển số</th>
+                    <th>RFID</th>
+                    <th>Trạng thái</th>
+                  </tr>
+                </thead>
+                <tbody id="lotDetailLogBody"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
         <section class="view" data-view-panel="rfid">
           <section class="view-grid two-col">
             <article class="panel">
@@ -284,6 +421,10 @@
                   <option value="in">in</option>
                   <option value="out">out</option>
                 </select>
+                <label>
+                  Bãi xe
+                  <select id="rfidLot"></select>
+                </label>
                 <input id="rfidPlate" placeholder="Biển số (optional)" />
                 <input id="rfidSource" placeholder="Source" value="web-rfid-tester" />
                 <button type="submit">Gửi sự kiện</button>

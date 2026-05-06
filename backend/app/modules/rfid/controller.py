@@ -4,6 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.database.session import get_db
+from app.dependencies import get_camera_manager
 from app.modules.rfid.schema import RfidCardCreate, RfidCardOut, RfidCardUpdate, RfidEventIn, RfidEventResult
 from app.modules.rfid.service import (
     create_rfid_card,
@@ -13,13 +14,18 @@ from app.modules.rfid.service import (
     ingest_rfid_event,
     update_rfid_card,
 )
+from app.services.camera_stream import CameraStreamManager
 
 router = APIRouter(tags=["rfid"])
 
 
 @router.post("/api/rfid/events", response_model=RfidEventResult)
-def ingest_rfid_event_endpoint(payload: RfidEventIn, db: Session = Depends(get_db)) -> RfidEventResult:
-    return ingest_rfid_event(db, payload)
+def ingest_rfid_event_endpoint(
+    payload: RfidEventIn,
+    db: Session = Depends(get_db),
+    camera_manager: CameraStreamManager = Depends(get_camera_manager),
+) -> RfidEventResult:
+    return ingest_rfid_event(db, payload, camera_manager=camera_manager)
 
 
 @router.get("/api/rfid/cards", response_model=list[RfidCardOut])

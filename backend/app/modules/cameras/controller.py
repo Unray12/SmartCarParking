@@ -68,13 +68,18 @@ async def ws_camera_stream(websocket: WebSocket, camera_id: int) -> None:
     await websocket.accept()
     camera_manager: CameraStreamManager = websocket.app.state.camera_manager
     last_ts = 0.0
+    last_send_time = 0.0
+    min_interval = 1.0 / 15  # Max 15 FPS
 
     try:
         while True:
-            frame, frame_ts = camera_manager.get_latest_frame(camera_id)
-            if frame and frame_ts > last_ts:
-                await websocket.send_bytes(frame)
-                last_ts = frame_ts
-            await asyncio.sleep(0.01)  # Reduced from 0.03 to 0.01 for lower latency
+            now = asyncio.get_event_loop().time()
+            if now - last_send_time >= min_interval:
+                frame, frame_ts = camera_manager.get_latest_frame(camera_id)
+                if frame and frame_ts > last_ts:
+                    await websocket.send_bytes(frame)
+                    last_ts = frame_ts
+                    last_send_time = now
+            await asyncio.sleep(0.005)
     except WebSocketDisconnect:
         return

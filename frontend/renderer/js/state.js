@@ -11,6 +11,10 @@ export const VIEW_META = {
     title: 'Logs',
     desc: 'Theo dõi log RFID, nhận diện biển số và sự kiện xe vào/ra theo thời gian thực.'
   },
+  parking: {
+    title: 'Parking Lots',
+    desc: 'Quản lý bãi xe, chỉ định camera vào/ra và trích xuất ảnh chụp theo phiên RFID.'
+  },
   rfid: {
     title: 'RFID Gate',
     desc: 'Mô phỏng hoặc gửi sự kiện RFID qua HTTP để test luồng vào/ra.'
@@ -43,6 +47,7 @@ export const appState = {
   focusedCameraId: null,
   rfidLogs: [],
   rfidCards: [],
+  parkingLots: [],
   user: {
     username: ''
   },

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections.abc import Generator
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import get_settings
@@ -36,3 +36,23 @@ def init_db() -> None:
     from app.modules import models as _models  # noqa: F401
 
     Base.metadata.create_all(bind=engine)
+    _ensure_runtime_schema()
+
+
+def _ensure_runtime_schema() -> None:
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+
+    if "parking_sessions" in tables:
+        existing = {col["name"] for col in inspector.get_columns("parking_sessions")}
+        additions = [
+            ("lot_id", "INTEGER"),
+            ("exit_camera_id", "INTEGER"),
+            ("entry_snapshot_path", "VARCHAR(512)"),
+            ("exit_snapshot_path", "VARCHAR(512)"),
+        ]
+        with engine.begin() as conn:
+            for name, sql_type in additions:
+                if name in existing:
+                    continue
+                conn.execute(text(f"ALTER TABLE parking_sessions ADD COLUMN {name} {sql_type}"))

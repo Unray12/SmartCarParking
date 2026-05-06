@@ -2,6 +2,7 @@ import { api, API_BASE } from './api.js';
 import { appState, VIEW_META, loadStorage, saveSettings } from './state.js';
 import { createCameraModule } from './camera.js';
 import { createLogModule } from './logs.js';
+import { WS_BASE } from './api.js';
 
 const els = {
   appShell: document.getElementById('appShell'),
@@ -65,6 +66,7 @@ const els = {
   rfidForm: document.getElementById('rfidForm'),
   rfidCard: document.getElementById('rfidCard'),
   rfidDirection: document.getElementById('rfidDirection'),
+  rfidLot: document.getElementById('rfidLot'),
   rfidPlate: document.getElementById('rfidPlate'),
   rfidSource: document.getElementById('rfidSource'),
   rfidLogBody: document.getElementById('rfidLogBody'),
@@ -74,6 +76,29 @@ const els = {
   rfidCardPlate: document.getElementById('rfidCardPlate'),
   rfidCardOwner: document.getElementById('rfidCardOwner'),
   rfidCardBody: document.getElementById('rfidCardBody'),
+  lotForm: document.getElementById('lotForm'),
+  lotFormTitle: document.getElementById('lotFormTitle'),
+  lotEditId: document.getElementById('lotEditId'),
+  lotName: document.getElementById('lotName'),
+  lotEntryCamera: document.getElementById('lotEntryCamera'),
+  lotExitCamera: document.getElementById('lotExitCamera'),
+  lotIsActive: document.getElementById('lotIsActive'),
+  lotSubmitBtn: document.getElementById('lotSubmitBtn'),
+  lotCancelEditBtn: document.getElementById('lotCancelEditBtn'),
+  lotBody: document.getElementById('lotBody'),
+  snapshotLotFilter: document.getElementById('snapshotLotFilter'),
+  snapshotRefreshBtn: document.getElementById('snapshotRefreshBtn'),
+  snapshotBody: document.getElementById('snapshotBody'),
+  lotDetailTitle: document.getElementById('lotDetailTitle'),
+  lotDetailMeta: document.getElementById('lotDetailMeta'),
+  lotDetailCloseBtn: document.getElementById('lotDetailCloseBtn'),
+  lotEntryCanvas: document.getElementById('lotEntryCanvas'),
+  lotEntryPlaceholder: document.getElementById('lotEntryPlaceholder'),
+  lotExitCanvas: document.getElementById('lotExitCanvas'),
+  lotExitPlaceholder: document.getElementById('lotExitPlaceholder'),
+  lotEntryCaptureImg: document.getElementById('lotEntryCaptureImg'),
+  lotExitCaptureImg: document.getElementById('lotExitCaptureImg'),
+  lotDetailLogBody: document.getElementById('lotDetailLogBody'),
 
   aiUploadForm: document.getElementById('aiUploadForm'),
   aiModelFile: document.getElementById('aiModelFile'),
@@ -104,6 +129,11 @@ let mainPoll = null;
 let cameraPoll = null;
 const AUTH_FLAG_KEY = 'scp_auth_ok';
 const AUTH_USER_KEY = 'scp_auth_user';
+const lotDetailState = {
+  selectedLotId: null,
+  entryWs: null,
+  exitWs: null
+};
 
 function isMobileViewport() {
   return window.matchMedia('(max-width: 1180px)').matches;
@@ -114,6 +144,19 @@ function fmtDate(ts) {
   const d = new Date(ts);
   if (Number.isNaN(d.getTime())) return '-';
   return d.toLocaleString('vi-VN', { hour12: false });
+}
+
+function absoluteApiUrl(path) {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return `${API_BASE}${path}`;
+}
+
+function absoluteApiUrlNoCache(path) {
+  const base = absoluteApiUrl(path);
+  if (!base) return '';
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}_ts=${Date.now()}`;
 }
 
 function notify(message, type = 'info') {
@@ -406,6 +449,301 @@ function renderRfidLogs() {
   }
 }
 
+function cameraNameById(cameraId) {
+  const cam = appState.cameras.find((x) => x.id === cameraId);
+  return cam ? `${cam.name} (#${cam.id})` : '-';
+}
+
+function renderLotCameraOptions() {
+  const makeOptions = (selectEl, selectedValue = '') => {
+    selectEl.innerHTML = '';
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = 'Không chỉ định';
+    selectEl.appendChild(none);
+    for (const cam of appState.cameras) {
+      const opt = document.createElement('option');
+      opt.value = String(cam.id);
+      opt.textContent = `${cam.name} (#${cam.id})`;
+      selectEl.appendChild(opt);
+    }
+    if (selectedValue) {
+      selectEl.value = selectedValue;
+    }
+  };
+
+  makeOptions(els.lotEntryCamera, els.lotEntryCamera.value);
+  makeOptions(els.lotExitCamera, els.lotExitCamera.value);
+}
+
+function resetLotForm() {
+  els.lotEditId.value = '';
+  els.lotFormTitle.textContent = 'Tạo bãi xe';
+  els.lotSubmitBtn.textContent = 'Lưu bãi xe';
+  els.lotForm.reset();
+  els.lotIsActive.checked = true;
+}
+
+function fillLotFormForEdit(lot) {
+  els.lotEditId.value = String(lot.id);
+  els.lotFormTitle.textContent = `Sửa bãi xe #${lot.id}`;
+  els.lotSubmitBtn.textContent = 'Cập nhật bãi xe';
+  els.lotName.value = lot.name;
+  els.lotEntryCamera.value = lot.entry_camera_id ? String(lot.entry_camera_id) : '';
+  els.lotExitCamera.value = lot.exit_camera_id ? String(lot.exit_camera_id) : '';
+  els.lotIsActive.checked = Boolean(lot.is_active);
+}
+
+function renderLotFilterOptions(lots) {
+  els.snapshotLotFilter.innerHTML = '';
+  els.rfidLot.innerHTML = '';
+
+  const allOpt = document.createElement('option');
+  allOpt.value = '';
+  allOpt.textContent = 'Tất cả bãi xe';
+  els.snapshotLotFilter.appendChild(allOpt);
+
+  const defaultLotOpt = document.createElement('option');
+  defaultLotOpt.value = '';
+  defaultLotOpt.textContent = 'Bãi mặc định (active)';
+  els.rfidLot.appendChild(defaultLotOpt);
+
+  for (const lot of lots) {
+    const opt = document.createElement('option');
+    opt.value = String(lot.id);
+    opt.textContent = `${lot.name} (#${lot.id})`;
+    els.snapshotLotFilter.appendChild(opt);
+
+    const lotOpt = document.createElement('option');
+    lotOpt.value = String(lot.id);
+    lotOpt.textContent = `${lot.name} (#${lot.id})`;
+    els.rfidLot.appendChild(lotOpt);
+  }
+}
+
+function renderParkingLots(lots) {
+  els.lotBody.innerHTML = '';
+  if (!lots.length) {
+    els.lotBody.innerHTML = '<tr><td colspan="8" class="empty">Chưa có bãi xe</td></tr>';
+    return;
+  }
+
+  for (const lot of lots) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${lot.id}</td>
+      <td>${lot.name}</td>
+      <td>${cameraNameById(lot.entry_camera_id)}</td>
+      <td>${cameraNameById(lot.exit_camera_id)}</td>
+      <td>${lot.is_active ? 'Active' : 'Inactive'}</td>
+      <td><button class="ghost lot-manage-btn" data-lot-id="${lot.id}">Quản lý</button></td>
+      <td><button class="ghost lot-edit-btn" data-lot-id="${lot.id}">Sửa</button></td>
+      <td><button class="ghost lot-delete-btn" data-lot-id="${lot.id}">Xóa</button></td>
+    `;
+    els.lotBody.appendChild(tr);
+  }
+
+  for (const btn of els.lotBody.querySelectorAll('.lot-manage-btn')) {
+    btn.addEventListener('click', async () => {
+      const lotId = Number(btn.dataset.lotId);
+      await openParkingLotDetail(lotId);
+    });
+  }
+
+  for (const btn of els.lotBody.querySelectorAll('.lot-edit-btn')) {
+    btn.addEventListener('click', () => {
+      const lotId = Number(btn.dataset.lotId);
+      const lot = appState.parkingLots.find((x) => x.id === lotId);
+      if (!lot) return;
+      fillLotFormForEdit(lot);
+    });
+  }
+
+  for (const btn of els.lotBody.querySelectorAll('.lot-delete-btn')) {
+    btn.addEventListener('click', async () => {
+      const lotId = btn.dataset.lotId;
+      if (!confirm(`Xóa bãi xe #${lotId}?`)) return;
+      try {
+        await api(`/api/parking-lots/${lotId}`, { method: 'DELETE' });
+        notify('Đã xóa bãi xe', 'success');
+        await loadParkingLots();
+        await refreshSnapshotList();
+      } catch (err) {
+        notify(`Xóa bãi xe lỗi: ${err.message}`, 'error');
+      }
+    });
+  }
+}
+
+async function loadParkingLots() {
+  const lots = await api('/api/parking-lots');
+  appState.parkingLots = lots;
+  renderParkingLots(lots);
+  renderLotFilterOptions(lots);
+}
+
+function closeLotWs(ws) {
+  if (!ws) return null;
+  ws.close();
+  return null;
+}
+
+function setLotPlaceholder(kind, text) {
+  if (kind === 'entry') {
+    els.lotEntryPlaceholder.textContent = text;
+    els.lotEntryPlaceholder.style.display = 'block';
+  } else {
+    els.lotExitPlaceholder.textContent = text;
+    els.lotExitPlaceholder.style.display = 'block';
+  }
+}
+
+function openLotStream(kind, cameraId) {
+  const canvas = kind === 'entry' ? els.lotEntryCanvas : els.lotExitCanvas;
+  const placeholder = kind === 'entry' ? els.lotEntryPlaceholder : els.lotExitPlaceholder;
+  const ctx = canvas.getContext('2d');
+  canvas.width = 1280;
+  canvas.height = 720;
+
+  if (!cameraId) {
+    setLotPlaceholder(kind, kind === 'entry' ? 'Chưa có camera vào' : 'Chưa có camera ra');
+    return;
+  }
+
+  let pendingFrame = null;
+  let decoding = false;
+  let animFrameId = null;
+
+  const ws = new WebSocket(`${WS_BASE}/ws/cameras/${cameraId}`);
+  ws.binaryType = 'arraybuffer';
+
+  async function consumeFrame() {
+    animFrameId = null;
+    if (decoding) return;
+    decoding = true;
+
+    const frame = pendingFrame;
+    pendingFrame = null;
+
+    if (frame) {
+      const blob = new Blob([frame], { type: 'image/jpeg' });
+      const bmp = await createImageBitmap(blob);
+      placeholder.style.display = 'none';
+      ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+      bmp.close();
+    }
+
+    decoding = false;
+
+    if (pendingFrame && !decoding) {
+      animFrameId = requestAnimationFrame(() => consumeFrame().catch(console.error));
+    }
+  }
+
+  ws.onmessage = (ev) => {
+    pendingFrame = ev.data;
+    if (!decoding && !animFrameId) {
+      animFrameId = requestAnimationFrame(() => consumeFrame().catch(console.error));
+    }
+  };
+
+  ws.onclose = () => {
+    pendingFrame = null;
+    if (animFrameId) {
+      cancelAnimationFrame(animFrameId);
+      animFrameId = null;
+    }
+    setLotPlaceholder(kind, 'Mất kết nối camera');
+  };
+
+  if (kind === 'entry') {
+    lotDetailState.entryWs = ws;
+  } else {
+    lotDetailState.exitWs = ws;
+  }
+}
+
+function closeLotDetailStreams() {
+  lotDetailState.entryWs = closeLotWs(lotDetailState.entryWs);
+  lotDetailState.exitWs = closeLotWs(lotDetailState.exitWs);
+}
+
+function renderLotDetailLogs(sessions) {
+  els.lotDetailLogBody.innerHTML = '';
+  const rows = [];
+  for (const s of sessions) {
+    rows.push({ at: s.entry_time, direction: 'in', plate: s.plate || '-', card: s.rfid_card, status: 'checked_in' });
+    if (s.exit_time) {
+      rows.push({ at: s.exit_time, direction: 'out', plate: s.plate || '-', card: s.rfid_card, status: 'checked_out' });
+    }
+  }
+  rows.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+
+  if (!rows.length) {
+    els.lotDetailLogBody.innerHTML = '<tr><td colspan="5" class="empty">Chưa có log in/out cho bãi này</td></tr>';
+    return;
+  }
+
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${fmtDate(row.at)}</td>
+      <td>${row.direction}</td>
+      <td>${row.plate}</td>
+      <td>${row.card}</td>
+      <td>${row.status}</td>
+    `;
+    els.lotDetailLogBody.appendChild(tr);
+  }
+}
+
+function renderLotLatestCaptures(snapshots) {
+  const latestIn = snapshots.find((x) => x.direction === 'in');
+  const latestOut = snapshots.find((x) => x.direction === 'out');
+  els.lotEntryCaptureImg.src = latestIn ? absoluteApiUrlNoCache(latestIn.image_url) : '';
+  els.lotExitCaptureImg.src = latestOut ? absoluteApiUrlNoCache(latestOut.image_url) : '';
+}
+
+async function openParkingLotDetail(lotId) {
+  const data = await api(`/api/parking-lots/${lotId}/overview?limit=100`);
+  lotDetailState.selectedLotId = lotId;
+  els.lotDetailTitle.textContent = `Chi tiết bãi xe: ${data.lot.name} (#${data.lot.id})`;
+  els.lotDetailMeta.textContent = `Cam vào: ${cameraNameById(data.lot.entry_camera_id)} | Cam ra: ${cameraNameById(data.lot.exit_camera_id)}`;
+  renderLotDetailLogs(data.sessions || []);
+  renderLotLatestCaptures(data.snapshots || []);
+
+  closeLotDetailStreams();
+  openLotStream('entry', data.lot.entry_camera_id);
+  openLotStream('exit', data.lot.exit_camera_id);
+}
+
+async function refreshSnapshotList() {
+  const lotId = els.snapshotLotFilter.value;
+  const query = lotId ? `?lot_id=${lotId}&limit=100` : '?limit=100';
+  const rows = await api(`/api/snapshots${query}`);
+
+  els.snapshotBody.innerHTML = '';
+  if (!rows.length) {
+    els.snapshotBody.innerHTML = '<tr><td colspan="7" class="empty">Chưa có ảnh snapshot</td></tr>';
+    return;
+  }
+
+  for (const row of rows) {
+    const lotName = appState.parkingLots?.find((x) => x.id === row.lot_id)?.name || (row.lot_id ? `#${row.lot_id}` : '-');
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${fmtDate(row.timestamp)}</td>
+      <td>${lotName}</td>
+      <td>${row.direction}</td>
+      <td>${row.plate}</td>
+      <td>${row.rfid_card}</td>
+      <td>${cameraNameById(row.camera_id)}</td>
+      <td><a href="${absoluteApiUrl(row.image_url)}" target="_blank" rel="noopener">Xem ảnh</a></td>
+    `;
+    els.snapshotBody.appendChild(tr);
+  }
+}
+
 async function refreshRfidEventLogs() {
   try {
     const logs = await api('/api/logs?hours=24&limit=50');
@@ -526,6 +864,7 @@ async function onCameraMutated() {
 
 async function onCamerasUpdated() {
   renderAiCameraOptions();
+  renderLotCameraOptions();
 }
 
 const cameraModule = createCameraModule({
@@ -568,6 +907,18 @@ function switchView(viewName) {
     loadRfidCards().catch((err) => notify(`RFID cards lỗi: ${err.message}`, 'warn'));
     refreshRfidEventLogs().catch((err) => notify(`RFID logs lỗi: ${err.message}`, 'warn'));
   }
+  if (viewName === 'parking') {
+    loadParkingLots()
+      .then(async () => {
+        await refreshSnapshotList();
+        if (lotDetailState.selectedLotId) {
+          await openParkingLotDetail(lotDetailState.selectedLotId);
+        }
+      })
+      .catch((err) => notify(`Parking lots lỗi: ${err.message}`, 'warn'));
+  } else {
+    closeLotDetailStreams();
+  }
   if (viewName === 'system') {
     runHealthCheck(false).catch((err) => notify(`Health check lỗi: ${err.message}`, 'warn'));
   }
@@ -603,6 +954,12 @@ function resetPolling() {
     }
     if (appState.currentView === 'rfid') {
       refreshRfidEventLogs().catch(console.error);
+    }
+    if (appState.currentView === 'parking') {
+      refreshSnapshotList().catch(console.error);
+      if (lotDetailState.selectedLotId) {
+        openParkingLotDetail(lotDetailState.selectedLotId).catch(console.error);
+      }
     }
   }, ms);
 
@@ -677,6 +1034,7 @@ function bindEvents() {
     ev.preventDefault();
     const cardId = els.rfidCard.value.trim();
     const direction = els.rfidDirection.value;
+    const lotIdRaw = els.rfidLot.value;
     const plate = els.rfidPlate.value.trim();
     const source = els.rfidSource.value.trim() || 'web-rfid-tester';
 
@@ -688,6 +1046,7 @@ function bindEvents() {
         body: JSON.stringify({
           card_id: cardId,
           direction,
+          lot_id: lotIdRaw ? Number(lotIdRaw) : null,
           plate: plate || null,
           source,
           data: { by: 'web-dashboard' }
@@ -726,6 +1085,62 @@ function bindEvents() {
     } catch (err) {
       notify(`Thêm thẻ lỗi: ${err.message}`, 'error');
     }
+  });
+
+  els.lotForm.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const name = els.lotName.value.trim();
+    if (!name) return;
+    const editId = els.lotEditId.value ? Number(els.lotEditId.value) : null;
+    const method = editId ? 'PUT' : 'POST';
+    const path = editId ? `/api/parking-lots/${editId}` : '/api/parking-lots';
+
+    try {
+      await api(path, {
+        method,
+        body: JSON.stringify({
+          name,
+          entry_camera_id: els.lotEntryCamera.value ? Number(els.lotEntryCamera.value) : null,
+          exit_camera_id: els.lotExitCamera.value ? Number(els.lotExitCamera.value) : null,
+          is_active: Boolean(els.lotIsActive.checked),
+        }),
+      });
+      notify(editId ? 'Cập nhật bãi xe thành công' : 'Tạo bãi xe thành công', 'success');
+      resetLotForm();
+      await loadParkingLots();
+      await refreshSnapshotList();
+      if (editId) {
+        await openParkingLotDetail(editId);
+      }
+    } catch (err) {
+      notify(`Lưu bãi xe lỗi: ${err.message}`, 'error');
+    }
+  });
+
+  els.lotCancelEditBtn.addEventListener('click', () => {
+    resetLotForm();
+  });
+
+  els.lotDetailCloseBtn.addEventListener('click', () => {
+    lotDetailState.selectedLotId = null;
+    closeLotDetailStreams();
+    els.lotDetailTitle.textContent = 'Chi tiết bãi xe';
+    els.lotDetailMeta.textContent = 'Chọn bãi xe từ danh sách để xem dữ liệu riêng.';
+    els.lotDetailLogBody.innerHTML = '<tr><td colspan="5" class="empty">Chưa có dữ liệu</td></tr>';
+    els.lotEntryCaptureImg.src = '';
+    els.lotExitCaptureImg.src = '';
+    setLotPlaceholder('entry', 'Chưa có camera vào');
+    setLotPlaceholder('exit', 'Chưa có camera ra');
+  });
+
+  els.snapshotLotFilter.addEventListener('change', () => {
+    refreshSnapshotList().catch((err) => notify(`Snapshot lỗi: ${err.message}`, 'error'));
+  });
+
+  els.snapshotRefreshBtn.addEventListener('click', () => {
+    refreshSnapshotList()
+      .then(() => notify('Đã làm mới snapshot', 'success'))
+      .catch((err) => notify(`Snapshot lỗi: ${err.message}`, 'error'));
   });
 
   els.aiUploadForm.addEventListener('submit', async (ev) => {
@@ -854,6 +1269,7 @@ async function bootstrap() {
   bindEvents();
   cameraModule.init();
   logModule.init();
+  resetLotForm();
   renderRfidLogs();
 
   try {
@@ -864,7 +1280,8 @@ async function bootstrap() {
       refreshRecentPlates(),
       refreshHistory(),
       refreshAiStatus(),
-      refreshRfidEventLogs()
+      refreshRfidEventLogs(),
+      loadParkingLots().then(() => refreshSnapshotList())
     ]);
     await runHealthCheck(false);
     notify('Kết nối backend thành công', 'success');

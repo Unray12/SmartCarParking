@@ -17,13 +17,14 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
     plate_recognizer: str = ""
 
-    stream_target_fps: int = 12
-    stream_jpeg_quality: int = 68
-    stream_max_width: int = 854
+    stream_target_fps: int = 15
+    stream_jpeg_quality: int = 74
+    stream_max_width: int = 960
     stream_infer_every_n_frames: int = 0
     stream_enable_inference: bool = False
     stream_plate_dedupe_seconds: int = 8
     ai_models_dir: str = "models_store"
+    snapshot_store_dir: str = "snapshots_store"
 
     # RFID USB Serial
     rfid_usb_port: str = "/dev/ttyUSB0"

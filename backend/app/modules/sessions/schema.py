@@ -14,4 +14,8 @@ class ParkingSessionOut(BaseModel):
     entry_time: datetime
     exit_time: datetime | None
     status: str
+    lot_id: int | None
     entry_camera_id: int | None
+    exit_camera_id: int | None
+    entry_snapshot_path: str | None
+    exit_snapshot_path: str | None

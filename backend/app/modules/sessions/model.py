@@ -17,4 +17,8 @@ class ParkingSession(Base):
     entry_time: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True, nullable=False)
     exit_time: Mapped[datetime | None] = mapped_column(DateTime, index=True, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="in", nullable=False)
+    lot_id: Mapped[int | None] = mapped_column(ForeignKey("parking_lots.id"), nullable=True)
     entry_camera_id: Mapped[int | None] = mapped_column(ForeignKey("cameras.id"), nullable=True)
+    exit_camera_id: Mapped[int | None] = mapped_column(ForeignKey("cameras.id"), nullable=True)
+    entry_snapshot_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    exit_snapshot_path: Mapped[str | None] = mapped_column(String(512), nullable=True)

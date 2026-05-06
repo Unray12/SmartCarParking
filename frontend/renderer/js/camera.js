@@ -16,12 +16,17 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
 
   function closeFocusSocket() {
     if (!focusRuntime.ws) return;
+    if (focusAnimFrame) {
+      cancelAnimationFrame(focusAnimFrame);
+      focusAnimFrame = null;
+    }
     focusRuntime.ws.onmessage = null;
     focusRuntime.ws.onclose = null;
     focusRuntime.ws.onerror = null;
     focusRuntime.ws.close();
     focusRuntime.ws = null;
     focusRuntime.cameraId = null;
+    focusRuntime.pendingFrame = null;
   }
 
   function renderFocusHeader() {
@@ -40,14 +45,16 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     els.focusMeta.textContent = `${camera.enabled ? 'Đang bật' : 'Đang tắt'} | ${camera.source_url}`;
   }
 
+  let focusAnimFrame = null;
   async function consumeFocusFrame() {
     if (focusRuntime.decoding) return;
     focusRuntime.decoding = true;
 
     const ctx = els.focusCanvas.getContext('2d');
-    while (focusRuntime.pendingFrame) {
-      const frame = focusRuntime.pendingFrame;
-      focusRuntime.pendingFrame = null;
+    const frame = focusRuntime.pendingFrame;
+    focusRuntime.pendingFrame = null;
+
+    if (frame) {
       const blob = new Blob([frame], { type: 'image/jpeg' });
       const bitmap = await createImageBitmap(blob);
       els.focusPlaceholder.style.display = 'none';
@@ -56,6 +63,11 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     }
 
     focusRuntime.decoding = false;
+
+    if (focusRuntime.pendingFrame && !focusRuntime.decoding) {
+      if (focusAnimFrame) cancelAnimationFrame(focusAnimFrame);
+      focusAnimFrame = requestAnimationFrame(() => consumeFocusFrame().catch(console.error));
+    }
   }
 
   function openFocusSocket(cameraId) {
@@ -223,13 +235,15 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       toggleBtn.className = `toggle ${next.enabled ? 'on' : ''}`;
     }
 
+    let animFrame = null;
     async function consumeFrame() {
       if (local.decoding) return;
       local.decoding = true;
 
-      while (local.pendingFrame) {
-        const frame = local.pendingFrame;
-        local.pendingFrame = null;
+      const frame = local.pendingFrame;
+      local.pendingFrame = null;
+
+      if (frame) {
         const blob = new Blob([frame], { type: 'image/jpeg' });
         const bitmap = await createImageBitmap(blob);
         placeholder.style.display = 'none';
@@ -238,6 +252,11 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       }
 
       local.decoding = false;
+
+      if (local.pendingFrame && !local.decoding) {
+        if (animFrame) cancelAnimationFrame(animFrame);
+        animFrame = requestAnimationFrame(() => consumeFrame().catch(console.error));
+      }
     }
 
     function closeSocket() {

@@ -20,6 +20,7 @@ from datetime import datetime
 settings = get_settings()
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 WEB_ROOT = PROJECT_ROOT / "frontend" / "renderer"
+_CAMERA_MANAGER: CameraStreamManager | None = None
 
 
 def _handle_rfid_from_usb(direction: str, card_id: str) -> None:
@@ -38,7 +39,7 @@ def _handle_rfid_from_usb(direction: str, card_id: str) -> None:
                 occurred_at=datetime.utcnow(),
                 data={"from": "usb_serial"},
             )
-            result = ingest_rfid_event(db, payload)
+            result = ingest_rfid_event(db, payload, camera_manager=_CAMERA_MANAGER)
             print(f"[RFID USB] {direction.upper()}: {card_id} → {result.status} (plate={result.plate})")
     except Exception as exc:
         print(f"[RFID USB] Error processing {card_id}: {exc}")
@@ -64,6 +65,8 @@ async def lifespan(app: FastAPI):
         config=stream_config,
     )
     app.state.camera_manager = camera_manager
+    global _CAMERA_MANAGER
+    _CAMERA_MANAGER = camera_manager
 
     camera_manager.bootstrap_enabled_cameras()
 

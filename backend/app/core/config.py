@@ -17,6 +17,14 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
     plate_recognizer: str = ""
 
+    # Parking fee (tính phí gửi xe)
+    parking_currency: str = "đ"
+    parking_fee_base: int = 0            # phí cố định mỗi lượt
+    parking_fee_per_block: int = 5000    # phí mỗi block thời gian
+    parking_fee_block_minutes: int = 60  # độ dài 1 block (phút)
+    parking_free_minutes: int = 15       # số phút miễn phí đầu
+    parking_default_capacity: int = 50   # sức chứa mặc định khi tạo bãi
+
     stream_target_fps: int = 25
     stream_jpeg_quality: int = 82
     stream_max_width: int = 1280

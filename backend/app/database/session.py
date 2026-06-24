@@ -50,9 +50,17 @@ def _ensure_runtime_schema() -> None:
             ("exit_camera_id", "INTEGER"),
             ("entry_snapshot_path", "VARCHAR(512)"),
             ("exit_snapshot_path", "VARCHAR(512)"),
+            ("fee", "INTEGER"),
+            ("duration_minutes", "INTEGER"),
         ]
         with engine.begin() as conn:
             for name, sql_type in additions:
                 if name in existing:
                     continue
                 conn.execute(text(f"ALTER TABLE parking_sessions ADD COLUMN {name} {sql_type}"))
+
+    if "parking_lots" in tables:
+        lot_cols = {col["name"] for col in inspector.get_columns("parking_lots")}
+        if "capacity" not in lot_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE parking_lots ADD COLUMN capacity INTEGER DEFAULT 50 NOT NULL"))

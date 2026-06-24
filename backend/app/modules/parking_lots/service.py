@@ -4,7 +4,7 @@ from datetime import datetime
 from pathlib import Path
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.modules.parking_lots.model import ParkingLot
@@ -16,6 +16,29 @@ NO_PLATE_SENTINEL = "__NONE__"
 
 def list_parking_lots(db: Session) -> list[ParkingLot]:
     return db.scalars(select(ParkingLot).order_by(ParkingLot.id.asc())).all()
+
+
+def _active_count_by_lot(db: Session) -> dict[int, int]:
+    rows = db.execute(
+        select(ParkingSession.lot_id, func.count(ParkingSession.id))
+        .where(ParkingSession.exit_time.is_(None))
+        .group_by(ParkingSession.lot_id)
+    ).all()
+    return {lot_id: int(count) for lot_id, count in rows if lot_id is not None}
+
+
+def lot_to_out(lot: ParkingLot, occupied: int | None = None) -> ParkingLotOut:
+    out = ParkingLotOut.model_validate(lot)
+    if occupied is not None:
+        out.occupied = occupied
+        out.available = max(0, (lot.capacity or 0) - occupied)
+    return out
+
+
+def list_parking_lots_with_occupancy(db: Session) -> list[ParkingLotOut]:
+    lots = list_parking_lots(db)
+    counts = _active_count_by_lot(db)
+    return [lot_to_out(lot, counts.get(lot.id, 0)) for lot in lots]
 
 
 def get_parking_lot(db: Session, lot_id: int) -> ParkingLot | None:
@@ -33,6 +56,7 @@ def create_parking_lot(db: Session, payload: ParkingLotCreate) -> ParkingLot:
 
     lot = ParkingLot(
         name=payload.name.strip(),
+        capacity=payload.capacity,
         entry_camera_id=payload.entry_camera_id,
         exit_camera_id=payload.exit_camera_id,
         is_active=payload.is_active,
@@ -57,6 +81,8 @@ def update_parking_lot(db: Session, lot_id: int, payload: ParkingLotUpdate) -> P
             raise HTTPException(status_code=400, detail="Parking lot name already exists")
         lot.name = cleaned
 
+    if payload.capacity is not None:
+        lot.capacity = payload.capacity
     lot.entry_camera_id = payload.entry_camera_id
     lot.exit_camera_id = payload.exit_camera_id
     if payload.is_active is not None:
@@ -166,8 +192,14 @@ def get_parking_lot_overview(db: Session, lot_id: int, limit: int = 100) -> Park
 
     snapshots = list_snapshot_items(db, lot_id=lot_id, limit=safe_limit)
 
+    occupied = db.scalar(
+        select(func.count(ParkingSession.id)).where(
+            ParkingSession.lot_id == lot_id, ParkingSession.exit_time.is_(None)
+        )
+    ) or 0
+
     return ParkingLotOverviewOut(
-        lot=ParkingLotOut.model_validate(lot),
+        lot=lot_to_out(lot, int(occupied)),
         sessions=mapped_sessions,
         snapshots=snapshots,
     )

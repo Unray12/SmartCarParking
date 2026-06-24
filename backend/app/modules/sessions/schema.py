@@ -9,7 +9,7 @@ class ParkingSessionOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
-    plate: str
+    plate: str | None
     rfid_card: str
     entry_time: datetime
     exit_time: datetime | None
@@ -19,3 +19,7 @@ class ParkingSessionOut(BaseModel):
     exit_camera_id: int | None
     entry_snapshot_path: str | None
     exit_snapshot_path: str | None
+    # Computed
+    duration_minutes: int = 0
+    fee: int = 0
+    currency: str = ""

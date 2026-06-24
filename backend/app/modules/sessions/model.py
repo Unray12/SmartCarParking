@@ -22,3 +22,7 @@ class ParkingSession(Base):
     exit_camera_id: Mapped[int | None] = mapped_column(ForeignKey("cameras.id"), nullable=True)
     entry_snapshot_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
     exit_snapshot_path: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    # Phí chốt khi xe ra (lưu lại để lịch sử không đổi dù cấu hình giá thay đổi sau này).
+    fee: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Số phút gửi chốt khi xe ra (snapshot tại thời điểm check-out).
+    duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)

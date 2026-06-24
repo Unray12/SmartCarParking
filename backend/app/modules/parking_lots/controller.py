@@ -14,8 +14,9 @@ from app.modules.parking_lots.service import (
     delete_parking_lot,
     get_parking_lot_overview,
     get_parking_lot,
-    list_parking_lots,
+    list_parking_lots_with_occupancy,
     list_snapshot_items,
+    lot_to_out,
     update_parking_lot,
 )
 
@@ -24,13 +25,13 @@ router = APIRouter(tags=["parking-lots"])
 
 @router.get("/api/parking-lots", response_model=list[ParkingLotOut])
 def list_parking_lots_endpoint(db: Session = Depends(get_db)) -> list[ParkingLotOut]:
-    return [ParkingLotOut.model_validate(x) for x in list_parking_lots(db)]
+    return list_parking_lots_with_occupancy(db)
 
 
 @router.post("/api/parking-lots", response_model=ParkingLotOut)
 def create_parking_lot_endpoint(payload: ParkingLotCreate, db: Session = Depends(get_db)) -> ParkingLotOut:
     lot = create_parking_lot(db, payload)
-    return ParkingLotOut.model_validate(lot)
+    return lot_to_out(lot, 0)
 
 
 @router.put("/api/parking-lots/{lot_id}", response_model=ParkingLotOut)
@@ -38,7 +39,7 @@ def update_parking_lot_endpoint(lot_id: int, payload: ParkingLotUpdate, db: Sess
     lot = update_parking_lot(db, lot_id, payload)
     if not lot:
         raise HTTPException(status_code=404, detail="Parking lot not found")
-    return ParkingLotOut.model_validate(lot)
+    return lot_to_out(lot)
 
 
 @router.delete("/api/parking-lots/{lot_id}")

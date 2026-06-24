@@ -11,8 +11,11 @@
       <aside class="sidebar" id="sidebar">
         <div class="sidebar-top">
           <div class="brand">
-            <h1>SmartCar Parking</h1>
-            <p>Camera + RFID + AI Plate</p>
+            <div class="brand-mark">P</div>
+            <div class="brand-text">
+              <h1>SmartCar Parking</h1>
+              <p>Camera · RFID · AI Plate</p>
+            </div>
           </div>
           <button
             class="sidebar-icon-btn"
@@ -29,15 +32,58 @@
         </div>
 
         <nav class="side-nav" id="sideNav">
-          <button class="nav-item is-active" data-view="dashboard">Dashboard</button>
-          <button class="nav-item" data-view="history">History</button>
-          <button class="nav-item" data-view="logs">Logs</button>
-          <button class="nav-item" data-view="parking">Parking Lots</button>
-          <button class="nav-item" data-view="rfid">RFID Gate</button>
-          <button class="nav-item" data-view="ai">AI Center</button>
-          <button class="nav-item" data-view="user" style="display:none">User</button>
-          <button class="nav-item" data-view="settings">Settings</button>
-          <button class="nav-item" data-view="system">System</button>
+          <p class="nav-group">Giám sát</p>
+          <button class="nav-item is-active" data-view="overview">
+            <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="7" height="9" rx="1.5"/><rect x="14" y="3" width="7" height="5" rx="1.5"/><rect x="14" y="12" width="7" height="9" rx="1.5"/><rect x="3" y="16" width="7" height="5" rx="1.5"/></svg>
+            <span>Overview</span>
+          </button>
+          <button class="nav-item" data-view="cameras">
+            <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 7.5A1.5 1.5 0 0 1 3.5 6h9A1.5 1.5 0 0 1 14 7.5v9A1.5 1.5 0 0 1 12.5 18h-9A1.5 1.5 0 0 1 2 16.5z"/><path d="M14 10.5l6-3.5v10l-6-3.5"/></svg>
+            <span>Cameras</span>
+          </button>
+          <button class="nav-item" data-view="parking">
+            <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="3"/><path d="M9 17V7h4a3 3 0 0 1 0 6H9"/></svg>
+            <span>Parking Lots</span>
+          </button>
+
+          <p class="nav-group">Dữ liệu</p>
+          <button class="nav-item" data-view="sessions">
+            <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>
+            <span>Sessions</span>
+          </button>
+          <button class="nav-item" data-view="plates">
+            <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10v4M9.5 10v4M13 10v4M16.5 10h1.5M16.5 14h1.5"/></svg>
+            <span>Plate Reads</span>
+          </button>
+          <button class="nav-item" data-view="reports">
+            <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 20V4M4 20h16"/><rect x="7" y="11" width="3" height="6"/><rect x="12" y="7" width="3" height="10"/><rect x="17" y="13" width="3" height="4"/></svg>
+            <span>Reports</span>
+          </button>
+          <button class="nav-item" data-view="logs">
+            <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 3h9l4 4v14a0 0 0 0 1 0 0H6z"/><path d="M14 3v5h5M9 13h7M9 17h7"/></svg>
+            <span>Logs</span>
+          </button>
+
+          <p class="nav-group">Quản trị</p>
+          <button class="nav-item" data-view="rfid">
+            <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="2.5" y="5" width="19" height="14" rx="2.5"/><path d="M2.5 9.5h19M6 14.5h4"/></svg>
+            <span>RFID Cards</span>
+          </button>
+          <button class="nav-item" data-view="ai">
+            <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="7" y="7" width="10" height="10" rx="2"/><path d="M10 1.5v3M14 1.5v3M10 19.5v3M14 19.5v3M1.5 10h3M1.5 14h3M19.5 10h3M19.5 14h3"/></svg>
+            <span>AI Center</span>
+          </button>
+          <button class="nav-item" data-view="settings">
+            <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 13.5a7.8 7.8 0 0 0 0-3l1.7-1.3-1.8-3.1-2 .8a7.6 7.6 0 0 0-2.6-1.5L12 2H8.8l-.3 2.4a7.6 7.6 0 0 0-2.6 1.5l-2-.8-1.8 3.1L3.8 9a7.8 7.8 0 0 0 0 3l-1.7 1.3 1.8 3.1 2-.8a7.6 7.6 0 0 0 2.6 1.5l.3 2.4H12l.3-2.4a7.6 7.6 0 0 0 2.6-1.5l2 .8 1.8-3.1z"/></svg>
+            <span>Settings</span>
+          </button>
+          <button class="nav-item" data-view="system">
+            <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
+            <span>System</span>
+          </button>
+          <button class="nav-item" data-view="user" style="display:none">
+            <span>User</span>
+          </button>
         </nav>
 
         <div class="sidebar-foot">
@@ -53,51 +99,90 @@
 
       <main class="content">
         <header class="global-head">
-          <div>
-            <h2 id="pageTitle">Dashboard</h2>
-            <p id="pageDesc">Giám sát camera realtime, quản lý phiên xe và biển số.</p>
+          <div class="global-head-text">
+            <h2 id="pageTitle">Overview</h2>
+            <p id="pageDesc">Tổng quan hệ thống.</p>
           </div>
           <div class="head-actions">
             <div class="notice" id="globalNotice">Sẵn sàng</div>
           </div>
         </header>
 
-        <section class="view is-active" data-view-panel="dashboard">
-          <section class="dashboard-metrics">
-            <article class="metric-card">
-              <span>Tổng camera</span>
-              <strong id="mCamerasTotal">0</strong>
+        <!-- ===================== OVERVIEW ===================== -->
+        <section class="view is-active" data-view-panel="overview">
+          <section class="kpi-grid">
+            <article class="kpi-card accent-cyan">
+              <span class="kpi-label">Xe đang gửi</span>
+              <strong class="kpi-value" id="mActive">0</strong>
+              <span class="kpi-sub">trong bãi</span>
             </article>
-            <article class="metric-card">
-              <span>Camera hoạt động</span>
-              <strong id="mCamerasOn">0</strong>
+            <article class="kpi-card accent-blue">
+              <span class="kpi-label">Tỉ lệ lấp đầy</span>
+              <strong class="kpi-value" id="mOccupancy">0%</strong>
+              <div class="kpi-bar"><span id="mOccupancyBar" style="width:0%"></span></div>
             </article>
-            <article class="metric-card">
-              <span>Xe đang gửi</span>
-              <strong id="mActive">0</strong>
+            <article class="kpi-card accent-green">
+              <span class="kpi-label">Doanh thu hôm nay</span>
+              <strong class="kpi-value" id="mRevenue">0</strong>
+              <span class="kpi-sub">từ xe đã ra</span>
             </article>
-            <article class="metric-card">
-              <span>Xe vào hôm nay</span>
-              <strong id="mCheckin">0</strong>
+            <article class="kpi-card">
+              <span class="kpi-label">Xe vào hôm nay</span>
+              <strong class="kpi-value" id="mCheckin">0</strong>
             </article>
-            <article class="metric-card">
-              <span>Xe ra hôm nay</span>
-              <strong id="mCheckout">0</strong>
+            <article class="kpi-card">
+              <span class="kpi-label">Xe ra hôm nay</span>
+              <strong class="kpi-value" id="mCheckout">0</strong>
+            </article>
+            <article class="kpi-card">
+              <span class="kpi-label">Camera hoạt động</span>
+              <strong class="kpi-value"><span id="mCamerasOn">0</span><span class="kpi-frac">/<span id="mCamerasTotal">0</span></span></strong>
             </article>
           </section>
 
-          <div class="view-grid">
+          <article class="panel">
+            <div class="panel-head"><h3>Tỉ lệ lấp đầy theo bãi</h3></div>
+            <div class="panel-content" id="overviewLotList">
+              <p class="empty">Chưa có bãi xe</p>
+            </div>
+          </article>
+
+          <section class="tables">
             <article class="panel">
-              <div class="panel-head">
-                <h3>Thêm camera mới</h3>
+              <div class="panel-head"><h3>Phiên gửi xe đang hoạt động</h3></div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>ID</th><th>Biển số</th><th>RFID</th><th>Giờ vào</th></tr>
+                  </thead>
+                  <tbody id="sessionBody"></tbody>
+                </table>
               </div>
-              <form id="cameraForm" class="camera-form">
-                <input id="cameraName" name="cameraName" placeholder="Tên camera" required />
-                <input id="cameraUrl" name="cameraUrl" placeholder="rtsp:// hoặc http://" required />
-                <button type="submit">+ Thêm camera</button>
-              </form>
             </article>
-          </div>
+            <article class="panel">
+              <div class="panel-head"><h3>Biển số nhận gần nhất</h3></div>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr><th>Thời gian</th><th>Camera</th><th>Biển số</th><th>Linked</th></tr>
+                  </thead>
+                  <tbody id="plateBody"></tbody>
+                </table>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <!-- ===================== CAMERAS ===================== -->
+        <section class="view" data-view-panel="cameras">
+          <article class="panel">
+            <div class="panel-head"><h3>Thêm camera mới</h3></div>
+            <form id="cameraForm" class="camera-form">
+              <input id="cameraName" name="cameraName" placeholder="Tên camera" required />
+              <input id="cameraUrl" name="cameraUrl" placeholder="rtsp:// hoặc http://" required />
+              <button type="submit">+ Thêm camera</button>
+            </form>
+          </article>
 
           <article class="panel focus-panel is-hidden" id="focusPanel">
             <div class="panel-head inline">
@@ -117,177 +202,26 @@
           </article>
 
           <section class="camera-grid" id="cameraGrid"></section>
-
-          <section class="tables">
-            <article class="panel">
-              <div class="panel-head">
-                <h3>Phiên gửi xe đang hoạt động</h3>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Biển số</th>
-                      <th>RFID</th>
-                      <th>Giờ vào</th>
-                    </tr>
-                  </thead>
-                  <tbody id="sessionBody"></tbody>
-                </table>
-              </div>
-            </article>
-
-            <article class="panel">
-              <div class="panel-head">
-                <h3>Biển số nhận gần nhất</h3>
-              </div>
-              <div class="table-wrap">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Thời gian</th>
-                      <th>Camera</th>
-                      <th>Biển số</th>
-                      <th>Linked</th>
-                    </tr>
-                  </thead>
-                  <tbody id="plateBody"></tbody>
-                </table>
-              </div>
-            </article>
-          </section>
         </section>
 
-        <section class="view" data-view-panel="history">
-          <section class="view-grid">
-            <article class="panel">
-              <div class="panel-head inline">
-                <h3>Lịch sử</h3>
-                <div class="compact-actions">
-                  <label>
-                    <input type="checkbox" id="historyActiveOnly" />
-                    Chỉ xe đang gửi
-                  </label>
-                  <select id="historyLimit">
-                    <option value="30">30</option>
-                    <option value="50" selected>50</option>
-                    <option value="100">100</option>
-                    <option value="200">200</option>
-                  </select>
-                  <button class="ghost" id="historyRefreshBtn" type="button">Làm mới</button>
-                </div>
-              </div>
-            </article>
-          </section>
-
-          <section class="tables">
-            <article class="panel">
-              <div class="panel-head">
-                <h3>Lịch sử phiên xe</h3>
-              </div>
-              <div class="table-wrap tall">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>ID</th>
-                      <th>Biển số</th>
-                      <th>RFID</th>
-                      <th>Giờ vào</th>
-                      <th>Giờ ra</th>
-                      <th>Trạng thái</th>
-                    </tr>
-                  </thead>
-                  <tbody id="historySessionBody"></tbody>
-                </table>
-              </div>
-            </article>
-
-            <article class="panel">
-              <div class="panel-head">
-                <h3>Lịch sử nhận diện biển số</h3>
-              </div>
-              <div class="table-wrap tall">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Thời gian</th>
-                      <th>Camera</th>
-                      <th>Biển số</th>
-                      <th>Confidence</th>
-                      <th>Linked</th>
-                    </tr>
-                  </thead>
-                  <tbody id="historyPlateBody"></tbody>
-                </table>
-              </div>
-            </article>
-          </section>
-        </section>
-
-        <section class="view" data-view-panel="logs">
-          <section class="view-grid">
-            <article class="panel">
-              <div class="panel-head inline">
-                <h3>Nhật ký sự kiện hệ thống</h3>
-                <div class="compact-actions">
-                  <label>
-                    Khoảng thời gian
-                    <select id="logHours">
-                      <option value="1">1h</option>
-                      <option value="6">6h</option>
-                      <option value="12">12h</option>
-                      <option value="24" selected>24h</option>
-                      <option value="72">72h</option>
-                    </select>
-                  </label>
-                  <label>
-                    Số bản ghi
-                    <select id="logLimit">
-                      <option value="50">50</option>
-                      <option value="100" selected>100</option>
-                      <option value="200">200</option>
-                      <option value="500">500</option>
-                    </select>
-                  </label>
-                  <label>
-                    <input type="checkbox" id="logAutoRefresh" checked />
-                    Auto refresh
-                  </label>
-                  <button class="ghost" id="logRefreshBtn" type="button">Làm mới</button>
-                </div>
-              </div>
-              <div class="table-wrap tall">
-                <table>
-                  <thead>
-                    <tr>
-                      <th>Thời gian</th>
-                      <th>Loại</th>
-                      <th>Nội dung</th>
-                    </tr>
-                  </thead>
-                  <tbody id="logBody"></tbody>
-                </table>
-              </div>
-            </article>
-          </section>
-        </section>
-
+        <!-- ===================== PARKING LOTS ===================== -->
         <section class="view" data-view-panel="parking">
           <section class="view-grid two-col">
             <article class="panel">
-              <div class="panel-head">
-                <h3 id="lotFormTitle">Tạo bãi xe</h3>
-              </div>
+              <div class="panel-head"><h3 id="lotFormTitle">Tạo bãi xe</h3></div>
               <form id="lotForm" class="stack-form">
                 <input id="lotEditId" type="hidden" />
                 <input id="lotName" placeholder="Tên bãi xe" required />
                 <label>
-                  Camera cổng vào
+                  Sức chứa (số chỗ)
+                  <input id="lotCapacity" type="number" min="0" value="50" />
+                </label>
+                <label>
+                  Camera cổng VÀO
                   <select id="lotEntryCamera"></select>
                 </label>
                 <label>
-                  Camera cổng ra
+                  Camera cổng RA
                   <select id="lotExitCamera"></select>
                 </label>
                 <label class="inline-checkbox">
@@ -312,15 +246,7 @@
               <div class="table-wrap tall">
                 <table>
                   <thead>
-                    <tr>
-                      <th>Thời gian</th>
-                      <th>Bãi</th>
-                      <th>Hướng</th>
-                      <th>Biển số</th>
-                      <th>RFID</th>
-                      <th>Camera</th>
-                      <th>Ảnh</th>
-                    </tr>
+                    <tr><th>Thời gian</th><th>Bãi</th><th>Hướng</th><th>Biển số</th><th>RFID</th><th>Camera</th><th>Ảnh</th></tr>
                   </thead>
                   <tbody id="snapshotBody"></tbody>
                 </table>
@@ -329,21 +255,12 @@
           </section>
 
           <article class="panel">
-            <div class="panel-head">
-              <h3>Danh sách bãi xe</h3>
-            </div>
+            <div class="panel-head"><h3>Danh sách bãi xe</h3></div>
             <div class="table-wrap tall">
               <table>
                 <thead>
                   <tr>
-                    <th>ID</th>
-                    <th>Tên bãi</th>
-                    <th>Cam vào</th>
-                    <th>Cam ra</th>
-                    <th>Trạng thái</th>
-                    <th>Quản lý</th>
-                    <th>Sửa</th>
-                    <th>Xóa</th>
+                    <th>ID</th><th>Tên bãi</th><th>Sức chứa</th><th>Lấp đầy</th><th>Cam vào</th><th>Cam ra</th><th>Trạng thái</th><th>Quản lý</th><th>Sửa</th><th>Xóa</th>
                   </tr>
                 </thead>
                 <tbody id="lotBody"></tbody>
@@ -361,14 +278,14 @@
             </div>
 
             <section class="view-grid two-col panel-content">
-              <article class="panel">
+              <article class="panel sub">
                 <div class="panel-head"><h3>Live cam vào</h3></div>
                 <div class="preview">
                   <canvas id="lotEntryCanvas"></canvas>
                   <span class="placeholder" id="lotEntryPlaceholder">Chưa có camera vào</span>
                 </div>
               </article>
-              <article class="panel">
+              <article class="panel sub">
                 <div class="panel-head"><h3>Live cam ra</h3></div>
                 <div class="preview">
                   <canvas id="lotExitCanvas"></canvas>
@@ -378,19 +295,19 @@
             </section>
 
             <section class="view-grid two-col panel-content">
-              <article class="panel">
+              <article class="panel sub">
                 <div class="panel-head"><h3>Ảnh capture vào mới nhất</h3></div>
                 <div class="panel-content">
-                  <img id="lotEntryCaptureImg" alt="entry capture" style="width:100%;max-height:260px;object-fit:contain;border:1px solid var(--line-soft);border-radius:8px;background:#050b11" />
+                  <img id="lotEntryCaptureImg" alt="entry capture" class="capture-img" />
                   <div class="capture-status-row">
                     <span class="capture-status is-off" id="lotEntryCaptureStatus">RFID vào: đang không quét</span>
                   </div>
                 </div>
               </article>
-              <article class="panel">
+              <article class="panel sub">
                 <div class="panel-head"><h3>Ảnh capture ra mới nhất</h3></div>
                 <div class="panel-content">
-                  <img id="lotExitCaptureImg" alt="exit capture" style="width:100%;max-height:260px;object-fit:contain;border:1px solid var(--line-soft);border-radius:8px;background:#050b11" />
+                  <img id="lotExitCaptureImg" alt="exit capture" class="capture-img" />
                   <div class="capture-status-row">
                     <span class="capture-status is-off" id="lotExitCaptureStatus">RFID ra: đang không quét</span>
                   </div>
@@ -401,13 +318,7 @@
             <div class="table-wrap tall panel-content lot-detail-log-wrap">
               <table>
                 <thead>
-                  <tr>
-                    <th>Thời gian</th>
-                    <th>Hướng</th>
-                    <th>Biển số</th>
-                    <th>RFID</th>
-                    <th>Trạng thái</th>
-                  </tr>
+                  <tr><th>Thời gian</th><th>Hướng</th><th>Biển số</th><th>RFID</th><th>Trạng thái</th></tr>
                 </thead>
                 <tbody id="lotDetailLogBody"></tbody>
               </table>
@@ -415,20 +326,155 @@
           </article>
         </section>
 
+        <!-- ===================== SESSIONS ===================== -->
+        <section class="view" data-view-panel="sessions">
+          <article class="panel">
+            <div class="panel-head inline">
+              <h3>Lịch sử phiên gửi xe</h3>
+              <div class="compact-actions">
+                <input id="sessionsSearch" class="search-input" type="search" placeholder="Tìm biển số / RFID..." />
+                <label><input type="checkbox" id="historyActiveOnly" /> Chỉ xe đang gửi</label>
+                <select id="historyLimit">
+                  <option value="30">30</option>
+                  <option value="50" selected>50</option>
+                  <option value="100">100</option>
+                  <option value="200">200</option>
+                </select>
+                <button class="ghost" id="historyRefreshBtn" type="button">Làm mới</button>
+              </div>
+            </div>
+            <div class="table-wrap tall">
+              <table>
+                <thead>
+                  <tr><th>ID</th><th>Biển số</th><th>RFID</th><th>Giờ vào</th><th>Giờ ra</th><th>Thời gian</th><th>Phí</th><th>Trạng thái</th></tr>
+                </thead>
+                <tbody id="historySessionBody"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <!-- ===================== PLATE READS ===================== -->
+        <section class="view" data-view-panel="plates">
+          <article class="panel">
+            <div class="panel-head inline">
+              <h3>Lịch sử nhận diện biển số</h3>
+              <div class="compact-actions">
+                <input id="platesSearch" class="search-input" type="search" placeholder="Tìm biển số / camera..." />
+                <button class="ghost" id="platesRefreshBtn" type="button">Làm mới</button>
+              </div>
+            </div>
+            <div class="table-wrap tall">
+              <table>
+                <thead>
+                  <tr><th>Thời gian</th><th>Camera</th><th>Biển số</th><th>Confidence</th><th>Linked</th></tr>
+                </thead>
+                <tbody id="historyPlateBody"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <!-- ===================== REPORTS ===================== -->
+        <section class="view" data-view-panel="reports">
+          <article class="panel">
+            <div class="panel-head inline">
+              <h3>Thống kê vận hành</h3>
+              <div class="compact-actions">
+                <select id="reportsDays">
+                  <option value="7" selected>7 ngày</option>
+                  <option value="14">14 ngày</option>
+                  <option value="30">30 ngày</option>
+                </select>
+                <button class="ghost" id="reportsRefreshBtn" type="button">Làm mới</button>
+              </div>
+            </div>
+          </article>
+
+          <section class="kpi-grid">
+            <article class="kpi-card accent-green">
+              <span class="kpi-label">Doanh thu</span>
+              <strong class="kpi-value" id="rpRevenue">0</strong>
+            </article>
+            <article class="kpi-card accent-blue">
+              <span class="kpi-label">Lượt đã hoàn tất</span>
+              <strong class="kpi-value" id="rpSessions">0</strong>
+            </article>
+            <article class="kpi-card accent-cyan">
+              <span class="kpi-label">Thời gian gửi TB</span>
+              <strong class="kpi-value" id="rpAvgDuration">0</strong>
+            </article>
+            <article class="kpi-card">
+              <span class="kpi-label">Giờ cao điểm</span>
+              <strong class="kpi-value" id="rpPeakHour">-</strong>
+            </article>
+          </section>
+
+          <section class="view-grid two-col">
+            <article class="panel">
+              <div class="panel-head"><h3>Lượt vào / ra theo ngày</h3></div>
+              <div class="panel-content chart-wrap">
+                <canvas id="dailyChartCanvas" height="240"></canvas>
+                <div class="chart-legend">
+                  <span><i class="dot dot-in"></i> Xe vào</span>
+                  <span><i class="dot dot-out"></i> Xe ra</span>
+                </div>
+              </div>
+            </article>
+            <article class="panel">
+              <div class="panel-head"><h3>Lượt vào theo giờ trong ngày</h3></div>
+              <div class="panel-content chart-wrap">
+                <canvas id="hourChartCanvas" height="240"></canvas>
+              </div>
+            </article>
+          </section>
+        </section>
+
+        <!-- ===================== LOGS ===================== -->
+        <section class="view" data-view-panel="logs">
+          <article class="panel">
+            <div class="panel-head inline">
+              <h3>Nhật ký sự kiện hệ thống</h3>
+              <div class="compact-actions">
+                <label>Khoảng thời gian
+                  <select id="logHours">
+                    <option value="1">1h</option><option value="6">6h</option><option value="12">12h</option>
+                    <option value="24" selected>24h</option><option value="72">72h</option>
+                  </select>
+                </label>
+                <label>Số bản ghi
+                  <select id="logLimit">
+                    <option value="50">50</option><option value="100" selected>100</option>
+                    <option value="200">200</option><option value="500">500</option>
+                  </select>
+                </label>
+                <label><input type="checkbox" id="logAutoRefresh" checked /> Auto refresh</label>
+                <button class="ghost" id="logRefreshBtn" type="button">Làm mới</button>
+              </div>
+            </div>
+            <div class="table-wrap tall">
+              <table>
+                <thead>
+                  <tr><th>Thời gian</th><th>Loại</th><th>Nội dung</th></tr>
+                </thead>
+                <tbody id="logBody"></tbody>
+              </table>
+            </div>
+          </article>
+        </section>
+
+        <!-- ===================== RFID ===================== -->
         <section class="view" data-view-panel="rfid">
           <section class="view-grid two-col">
             <article class="panel">
-              <div class="panel-head">
-                <h3>Gửi tín hiệu RFID (test)</h3>
-              </div>
+              <div class="panel-head"><h3>Gửi tín hiệu RFID (test)</h3></div>
               <form id="rfidForm" class="stack-form">
                 <input id="rfidCard" placeholder="Card ID" required />
                 <select id="rfidDirection">
                   <option value="in">in</option>
                   <option value="out">out</option>
                 </select>
-                <label>
-                  Bãi xe
+                <label>Bãi xe
                   <select id="rfidLot"></select>
                 </label>
                 <input id="rfidPlate" placeholder="Biển số (optional)" />
@@ -438,9 +484,7 @@
             </article>
 
             <article class="panel">
-              <div class="panel-head">
-                <h3>Quản lý thẻ RFID</h3>
-              </div>
+              <div class="panel-head"><h3>Quản lý thẻ RFID</h3></div>
               <form id="rfidCardForm" class="stack-form">
                 <input id="rfidCardId" placeholder="Card ID (VD: 8E:68:B9:06)" required />
                 <input id="rfidCardPlate" placeholder="Biển số xe" required />
@@ -450,13 +494,7 @@
               <div class="table-wrap tall" style="margin-top:12px">
                 <table>
                   <thead>
-                    <tr>
-                      <th>Card ID</th>
-                      <th>Biển số</th>
-                      <th>Chủ xe</th>
-                      <th>Trạng thái</th>
-                      <th>Xóa</th>
-                    </tr>
+                    <tr><th>Card ID</th><th>Biển số</th><th>Chủ xe</th><th>Trạng thái</th><th>Xóa</th></tr>
                   </thead>
                   <tbody id="rfidCardBody"></tbody>
                 </table>
@@ -466,18 +504,11 @@
 
           <section class="view-grid">
             <article class="panel">
-              <div class="panel-head">
-                <h3>Kết quả RFID gần nhất</h3>
-              </div>
+              <div class="panel-head"><h3>Kết quả RFID gần nhất</h3></div>
               <div class="table-wrap tall">
                 <table>
                   <thead>
-                    <tr>
-                      <th>Thời gian</th>
-                      <th>Card</th>
-                      <th>Status</th>
-                      <th>Biển số</th>
-                    </tr>
+                    <tr><th>Thời gian</th><th>Card</th><th>Status</th><th>Biển số</th></tr>
                   </thead>
                   <tbody id="rfidLogBody"></tbody>
                 </table>
@@ -486,12 +517,11 @@
           </section>
         </section>
 
+        <!-- ===================== AI ===================== -->
         <section class="view" data-view-panel="ai">
           <section class="view-grid two-col">
             <article class="panel">
-              <div class="panel-head">
-                <h3>Upload model AI</h3>
-              </div>
+              <div class="panel-head"><h3>Upload model AI</h3></div>
               <form id="aiUploadForm" class="stack-form">
                 <input id="aiModelFile" type="file" accept=".pt,.onnx,.pth,.engine,.pkl,.bin" required />
                 <button type="submit">Upload model</button>
@@ -502,9 +532,7 @@
             </article>
 
             <article class="panel">
-              <div class="panel-head">
-                <h3>Test camera với AI</h3>
-              </div>
+              <div class="panel-head"><h3>Test camera với AI</h3></div>
               <form id="aiTestForm" class="stack-form">
                 <select id="aiCameraSelect"></select>
                 <button type="submit">Chạy test</button>
@@ -516,21 +544,18 @@
           </section>
 
           <article class="panel">
-            <div class="panel-head">
-              <h3>Model đã upload</h3>
-            </div>
+            <div class="panel-head"><h3>Model đã upload</h3></div>
             <div class="panel-content">
               <ul class="list" id="aiModelsList"></ul>
             </div>
           </article>
         </section>
 
+        <!-- ===================== USER (hidden) ===================== -->
         <section class="view" data-view-panel="user">
           <section class="view-grid two-col">
             <article class="panel">
-              <div class="panel-head">
-                <h3>Login</h3>
-              </div>
+              <div class="panel-head"><h3>Login</h3></div>
               <form id="userLoginForm" class="stack-form">
                 <input id="userName" placeholder="Username" required />
                 <input id="userPassword" type="password" placeholder="Password" required />
@@ -538,11 +563,8 @@
                 <button type="submit">Login</button>
               </form>
             </article>
-
             <article class="panel">
-              <div class="panel-head">
-                <h3>User session</h3>
-              </div>
+              <div class="panel-head"><h3>User session</h3></div>
               <div class="panel-content">
                 <p id="userStateText" class="muted">Chưa đăng nhập.</p>
                 <button class="ghost" id="logoutBtn" type="button">Logout</button>
@@ -551,22 +573,16 @@
           </section>
         </section>
 
+        <!-- ===================== SETTINGS ===================== -->
         <section class="view" data-view-panel="settings">
           <article class="panel">
-            <div class="panel-head">
-              <h3>Cài đặt hệ thống</h3>
-            </div>
+            <div class="panel-head"><h3>Cài đặt hệ thống</h3></div>
             <form id="settingsForm" class="stack-form panel-content">
-              <label>
-                Refresh interval (giây)
+              <label>Refresh interval (giây)
                 <input id="refreshSeconds" type="number" min="2" max="60" value="3" required />
               </label>
-              <label>
-                <input id="autoRefresh" type="checkbox" checked />
-                Bật tự động làm mới dữ liệu
-              </label>
-              <label>
-                API base
+              <label><input id="autoRefresh" type="checkbox" checked /> Bật tự động làm mới dữ liệu</label>
+              <label>API base
                 <input id="apiBaseReadonly" type="text" readonly />
               </label>
               <button type="submit">Lưu cài đặt</button>
@@ -574,6 +590,7 @@
           </article>
         </section>
 
+        <!-- ===================== SYSTEM ===================== -->
         <section class="view" data-view-panel="system">
           <section class="view-grid two-col">
             <article class="panel">
@@ -585,15 +602,12 @@
                 <pre class="result" id="healthResult">Chưa kiểm tra</pre>
               </div>
             </article>
-
             <article class="panel">
-              <div class="panel-head">
-                <h3>Ghi chú</h3>
-              </div>
+              <div class="panel-head"><h3>Ghi chú vận hành</h3></div>
               <div class="panel-content muted">
-                <p>1. Dashboard chỉ mở stream khi bạn đứng ở tab Dashboard để giảm tải.</p>
+                <p>1. Camera chỉ mở stream khi bạn đứng ở tab Cameras / Parking để giảm tải.</p>
                 <p>2. Model upload thành công sẽ lưu vào thư mục backend.</p>
-                <p>3. Dùng RFID Gate để test luồng vào/ra nhanh.</p>
+                <p>3. Phí gửi xe & sức chứa cấu hình trong backend/.env.</p>
               </div>
             </article>
           </section>
@@ -610,12 +624,10 @@
       <form class="login-card" id="loginGateForm">
         <h3>Đăng nhập hệ thống</h3>
         <p class="muted">Vui lòng đăng nhập để truy cập dashboard.</p>
-        <label>
-          Username
+        <label>Username
           <input id="loginGateUsername" autocomplete="username" required />
         </label>
-        <label>
-          Password
+        <label>Password
           <input id="loginGatePassword" type="password" autocomplete="current-password" required />
         </label>
         <p class="login-error" id="loginGateError"></p>
@@ -630,12 +642,10 @@
           <button class="ghost" id="cameraEditCancelBtn" type="button">Đóng</button>
         </div>
         <form id="cameraEditForm" class="stack-form panel-content">
-          <label>
-            Tên camera
+          <label>Tên camera
             <input id="cameraEditName" required />
           </label>
-          <label>
-            Nguồn camera
+          <label>Nguồn camera
             <input id="cameraEditUrl" required />
           </label>
           <label class="inline-checkbox">

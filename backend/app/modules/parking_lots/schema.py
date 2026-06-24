@@ -7,6 +7,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 class ParkingLotCreate(BaseModel):
     name: str = Field(min_length=1, max_length=120)
+    capacity: int = Field(default=50, ge=0, le=100000)
     entry_camera_id: int | None = None
     exit_camera_id: int | None = None
     is_active: bool = True
@@ -14,6 +15,7 @@ class ParkingLotCreate(BaseModel):
 
 class ParkingLotUpdate(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=120)
+    capacity: int | None = Field(default=None, ge=0, le=100000)
     entry_camera_id: int | None = None
     exit_camera_id: int | None = None
     is_active: bool | None = None
@@ -24,11 +26,15 @@ class ParkingLotOut(BaseModel):
 
     id: int
     name: str
+    capacity: int = 0
     entry_camera_id: int | None
     exit_camera_id: int | None
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    # Computed occupancy (None khi không tính, ví dụ ở create/update response).
+    occupied: int | None = None
+    available: int | None = None
 
 
 class SnapshotItemOut(BaseModel):

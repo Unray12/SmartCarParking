@@ -25,6 +25,10 @@ class RfidEventResult(BaseModel):
     lot_id: int | None = None
     snapshot_path: str | None = None
     mismatch: bool = False
+    # Phí gửi xe khi check-out
+    fee: int | None = None
+    currency: str | None = None
+    duration_minutes: int | None = None
 
 
 class RfidCardCreate(BaseModel):

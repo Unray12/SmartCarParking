@@ -53,12 +53,28 @@ const els = {
   mActive: document.getElementById('mActive'),
   mCheckin: document.getElementById('mCheckin'),
   mCheckout: document.getElementById('mCheckout'),
+  mOccupancy: document.getElementById('mOccupancy'),
+  mOccupancyBar: document.getElementById('mOccupancyBar'),
+  mRevenue: document.getElementById('mRevenue'),
+  overviewLotList: document.getElementById('overviewLotList'),
 
   historyActiveOnly: document.getElementById('historyActiveOnly'),
   historyLimit: document.getElementById('historyLimit'),
   historyRefreshBtn: document.getElementById('historyRefreshBtn'),
   historySessionBody: document.getElementById('historySessionBody'),
   historyPlateBody: document.getElementById('historyPlateBody'),
+  sessionsSearch: document.getElementById('sessionsSearch'),
+  platesSearch: document.getElementById('platesSearch'),
+  platesRefreshBtn: document.getElementById('platesRefreshBtn'),
+
+  reportsDays: document.getElementById('reportsDays'),
+  reportsRefreshBtn: document.getElementById('reportsRefreshBtn'),
+  rpRevenue: document.getElementById('rpRevenue'),
+  rpSessions: document.getElementById('rpSessions'),
+  rpAvgDuration: document.getElementById('rpAvgDuration'),
+  rpPeakHour: document.getElementById('rpPeakHour'),
+  dailyChartCanvas: document.getElementById('dailyChartCanvas'),
+  hourChartCanvas: document.getElementById('hourChartCanvas'),
   logHours: document.getElementById('logHours'),
   logLimit: document.getElementById('logLimit'),
   logAutoRefresh: document.getElementById('logAutoRefresh'),
@@ -82,6 +98,7 @@ const els = {
   lotFormTitle: document.getElementById('lotFormTitle'),
   lotEditId: document.getElementById('lotEditId'),
   lotName: document.getElementById('lotName'),
+  lotCapacity: document.getElementById('lotCapacity'),
   lotEntryCamera: document.getElementById('lotEntryCamera'),
   lotExitCamera: document.getElementById('lotExitCamera'),
   lotIsActive: document.getElementById('lotIsActive'),
@@ -170,6 +187,19 @@ function absoluteApiUrl(path) {
   if (!path) return '';
   if (path.startsWith('http://') || path.startsWith('https://')) return path;
   return `${API_BASE}${path}`;
+}
+
+function fmtMoney(amount, currency = '') {
+  const n = Number(amount || 0);
+  return `${n.toLocaleString('vi-VN')}${currency ? ' ' + currency : ''}`;
+}
+
+function fmtDuration(minutes) {
+  const m = Math.max(0, Math.round(Number(minutes || 0)));
+  if (m < 60) return `${m} phút`;
+  const h = Math.floor(m / 60);
+  const rem = m % 60;
+  return rem ? `${h}h${String(rem).padStart(2, '0')}` : `${h}h`;
 }
 
 function absoluteApiUrlNoCache(path) {
@@ -385,6 +415,17 @@ async function refreshDashboard() {
   els.mActive.textContent = summary.active_sessions;
   els.mCheckin.textContent = summary.today_checkins;
   els.mCheckout.textContent = summary.today_checkouts;
+
+  const rate = Number(summary.occupancy_rate || 0);
+  if (els.mOccupancy) {
+    els.mOccupancy.textContent = `${rate}%`;
+  }
+  if (els.mOccupancyBar) {
+    els.mOccupancyBar.style.width = `${Math.min(100, rate)}%`;
+  }
+  if (els.mRevenue) {
+    els.mRevenue.textContent = fmtMoney(summary.today_revenue, summary.currency);
+  }
 }
 
 async function refreshActiveSessions() {
@@ -400,7 +441,7 @@ async function refreshActiveSessions() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${row.id}</td>
-      <td>${row.plate}</td>
+      <td>${row.plate || '-'}</td>
       <td>${row.rfid_card}</td>
       <td>${fmtDate(row.entry_time)}</td>
     `;
@@ -429,49 +470,76 @@ async function refreshRecentPlates() {
   }
 }
 
-async function refreshHistory() {
-  const limit = Number(els.historyLimit.value || 50);
-  const activeOnly = els.historyActiveOnly.checked;
+let allSessions = [];
+let allPlates = [];
 
-  const [sessions, plates] = await Promise.all([
-    api(`/api/sessions?active_only=${activeOnly}&limit=${limit}`),
-    api(`/api/plates/recent?limit=${limit}`)
-  ]);
+function renderSessionsTable() {
+  const q = (els.sessionsSearch?.value || '').trim().toLowerCase();
+  const rows = q
+    ? allSessions.filter((r) =>
+        (r.plate || '').toLowerCase().includes(q) || (r.rfid_card || '').toLowerCase().includes(q))
+    : allSessions;
 
   els.historySessionBody.innerHTML = '';
-  if (!sessions.length) {
-    els.historySessionBody.innerHTML = '<tr><td colspan="6" class="empty">Không có dữ liệu phiên xe</td></tr>';
-  } else {
-    for (const row of sessions) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${row.id}</td>
-        <td>${row.plate}</td>
-        <td>${row.rfid_card}</td>
-        <td>${fmtDate(row.entry_time)}</td>
-        <td>${fmtDate(row.exit_time)}</td>
-        <td>${row.status}</td>
-      `;
-      els.historySessionBody.appendChild(tr);
-    }
+  if (!rows.length) {
+    els.historySessionBody.innerHTML = '<tr><td colspan="8" class="empty">Không có dữ liệu phiên xe</td></tr>';
+    return;
   }
+  for (const row of rows) {
+    const statusChip = row.status === 'in'
+      ? '<span class="chip chip-in">Đang gửi</span>'
+      : '<span class="chip chip-out">Đã ra</span>';
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${row.id}</td>
+      <td>${row.plate || '-'}</td>
+      <td>${row.rfid_card}</td>
+      <td>${fmtDate(row.entry_time)}</td>
+      <td>${fmtDate(row.exit_time)}</td>
+      <td>${fmtDuration(row.duration_minutes)}</td>
+      <td class="fee-val">${fmtMoney(row.fee, row.currency)}</td>
+      <td>${statusChip}</td>
+    `;
+    els.historySessionBody.appendChild(tr);
+  }
+}
+
+function renderPlatesTable() {
+  const q = (els.platesSearch?.value || '').trim().toLowerCase();
+  const rows = q
+    ? allPlates.filter((r) =>
+        (r.plate || '').toLowerCase().includes(q) || (r.camera_name || '').toLowerCase().includes(q))
+    : allPlates;
 
   els.historyPlateBody.innerHTML = '';
-  if (!plates.length) {
+  if (!rows.length) {
     els.historyPlateBody.innerHTML = '<tr><td colspan="5" class="empty">Không có dữ liệu nhận diện</td></tr>';
-  } else {
-    for (const row of plates) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `
-        <td>${fmtDate(row.seen_at)}</td>
-        <td>${row.camera_name}</td>
-        <td>${row.plate}</td>
-        <td>${row.confidence == null ? '-' : row.confidence.toFixed(3)}</td>
-        <td>${row.linked ? 'Yes' : 'No'}</td>
-      `;
-      els.historyPlateBody.appendChild(tr);
-    }
+    return;
   }
+  for (const row of rows) {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${fmtDate(row.seen_at)}</td>
+      <td>${row.camera_name}</td>
+      <td>${row.plate}</td>
+      <td>${row.confidence == null ? '-' : row.confidence.toFixed(3)}</td>
+      <td>${row.linked ? '<span class="chip chip-in">Yes</span>' : '<span class="chip chip-out">No</span>'}</td>
+    `;
+    els.historyPlateBody.appendChild(tr);
+  }
+}
+
+async function refreshSessions() {
+  const limit = Number(els.historyLimit.value || 50);
+  const activeOnly = els.historyActiveOnly.checked;
+  allSessions = await api(`/api/sessions?active_only=${activeOnly}&limit=${limit}`);
+  renderSessionsTable();
+}
+
+async function refreshPlates() {
+  const limit = Number(els.historyLimit?.value || 50);
+  allPlates = await api(`/api/plates/recent?limit=${limit}`);
+  renderPlatesTable();
 }
 
 function renderRfidLogs() {
@@ -526,6 +594,7 @@ function resetLotForm() {
   els.lotSubmitBtn.textContent = 'Lưu bãi xe';
   els.lotForm.reset();
   els.lotIsActive.checked = true;
+  if (els.lotCapacity) els.lotCapacity.value = '50';
 }
 
 function fillLotFormForEdit(lot) {
@@ -533,6 +602,7 @@ function fillLotFormForEdit(lot) {
   els.lotFormTitle.textContent = `Sửa bãi xe #${lot.id}`;
   els.lotSubmitBtn.textContent = 'Cập nhật bãi xe';
   els.lotName.value = lot.name;
+  if (els.lotCapacity) els.lotCapacity.value = String(lot.capacity ?? 50);
   els.lotEntryCamera.value = lot.entry_camera_id ? String(lot.entry_camera_id) : '';
   els.lotExitCamera.value = lot.exit_camera_id ? String(lot.exit_camera_id) : '';
   els.lotIsActive.checked = Boolean(lot.is_active);
@@ -565,21 +635,63 @@ function renderLotFilterOptions(lots) {
   }
 }
 
+function occRate(occupied, capacity) {
+  const cap = Number(capacity || 0);
+  if (cap <= 0) return 0;
+  return Math.min(100, Math.round((Number(occupied || 0) / cap) * 100));
+}
+
+function occClass(rate) {
+  if (rate >= 90) return 'is-high';
+  if (rate >= 60) return 'is-mid';
+  return '';
+}
+
+function renderOverviewLots(lots) {
+  if (!els.overviewLotList) return;
+  if (!lots || !lots.length) {
+    els.overviewLotList.innerHTML = '<p class="empty">Chưa có bãi xe</p>';
+    return;
+  }
+  els.overviewLotList.innerHTML = '';
+  for (const lot of lots) {
+    const occ = Number(lot.occupied || 0);
+    const cap = Number(lot.capacity || 0);
+    const rate = occRate(occ, cap);
+    const row = document.createElement('div');
+    row.className = 'occ-row';
+    row.innerHTML = `
+      <div class="occ-name">${lot.name}</div>
+      <div class="occ-track"><div class="occ-fill ${occClass(rate)}" style="width:${rate}%"></div></div>
+      <div class="occ-meta"><strong>${occ}</strong>/${cap} · ${rate}%</div>
+    `;
+    els.overviewLotList.appendChild(row);
+  }
+}
+
 function renderParkingLots(lots) {
   els.lotBody.innerHTML = '';
   if (!lots.length) {
-    els.lotBody.innerHTML = '<tr><td colspan="8" class="empty">Chưa có bãi xe</td></tr>';
+    els.lotBody.innerHTML = '<tr><td colspan="10" class="empty">Chưa có bãi xe</td></tr>';
     return;
   }
 
   for (const lot of lots) {
+    const occ = Number(lot.occupied || 0);
+    const cap = Number(lot.capacity || 0);
+    const rate = occRate(occ, cap);
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${lot.id}</td>
       <td>${lot.name}</td>
+      <td>${cap}</td>
+      <td style="min-width:140px">
+        <div class="occ-track"><div class="occ-fill ${occClass(rate)}" style="width:${rate}%"></div></div>
+        <span class="occ-meta">${occ}/${cap} · ${rate}%</span>
+      </td>
       <td>${cameraNameById(lot.entry_camera_id)}</td>
       <td>${cameraNameById(lot.exit_camera_id)}</td>
-      <td>${lot.is_active ? 'Active' : 'Inactive'}</td>
+      <td>${lot.is_active ? '<span class="chip chip-in">Active</span>' : '<span class="chip chip-out">Inactive</span>'}</td>
       <td><button class="ghost lot-manage-btn" data-lot-id="${lot.id}">Quản lý</button></td>
       <td><button class="ghost lot-edit-btn" data-lot-id="${lot.id}">Sửa</button></td>
       <td><button class="ghost lot-delete-btn" data-lot-id="${lot.id}">Xóa</button></td>
@@ -624,6 +736,7 @@ async function loadParkingLots() {
   appState.parkingLots = lots;
   renderParkingLots(lots);
   renderLotFilterOptions(lots);
+  renderOverviewLots(lots);
 }
 
 function closeLotWs(ws) {
@@ -1086,6 +1199,125 @@ async function refreshAiStatus() {
   }
 }
 
+// ---- Reports / charts ----
+const CHART_HEIGHT = 240;
+
+function prepareCanvas(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.clientWidth || canvas.parentElement.clientWidth || 600;
+  const cssH = CHART_HEIGHT; // fixed logical height (also set in CSS)
+  canvas.width = Math.round(cssW * dpr);
+  canvas.height = Math.round(cssH * dpr);
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+  return { ctx, w: cssW, h: cssH };
+}
+
+function drawAxes(ctx, w, h, pad, maxVal) {
+  ctx.strokeStyle = 'rgba(148,173,211,0.18)';
+  ctx.fillStyle = '#8d9cb5';
+  ctx.font = '11px Inter, Segoe UI, sans-serif';
+  ctx.lineWidth = 1;
+  const steps = 4;
+  for (let i = 0; i <= steps; i += 1) {
+    const y = pad.top + (h - pad.top - pad.bottom) * (i / steps);
+    const val = Math.round(maxVal * (1 - i / steps));
+    ctx.beginPath();
+    ctx.moveTo(pad.left, y);
+    ctx.lineTo(w - pad.right, y);
+    ctx.stroke();
+    ctx.fillText(String(val), 6, y + 3);
+  }
+}
+
+function drawGroupedBars(canvas, labels, seriesA, seriesB) {
+  if (!canvas) return;
+  const { ctx, w, h } = prepareCanvas(canvas);
+  const pad = { top: 12, right: 12, bottom: 26, left: 30 };
+  const maxVal = Math.max(1, ...seriesA, ...seriesB);
+  drawAxes(ctx, w, h, pad, maxVal);
+
+  const plotW = w - pad.left - pad.right;
+  const plotH = h - pad.top - pad.bottom;
+  const groupW = plotW / labels.length;
+  const barW = Math.max(3, Math.min(16, groupW / 3));
+
+  for (let i = 0; i < labels.length; i += 1) {
+    const cx = pad.left + groupW * i + groupW / 2;
+    const aH = (seriesA[i] / maxVal) * plotH;
+    const bH = (seriesB[i] / maxVal) * plotH;
+    ctx.fillStyle = '#2dd4bf';
+    ctx.fillRect(cx - barW - 1, pad.top + plotH - aH, barW, aH);
+    ctx.fillStyle = '#4f86ff';
+    ctx.fillRect(cx + 1, pad.top + plotH - bH, barW, bH);
+    if (labels.length <= 16 || i % 2 === 0) {
+      ctx.fillStyle = '#8d9cb5';
+      ctx.textAlign = 'center';
+      ctx.fillText(labels[i], cx, h - 8);
+      ctx.textAlign = 'left';
+    }
+  }
+}
+
+function drawBars(canvas, labels, values, color) {
+  if (!canvas) return;
+  const { ctx, w, h } = prepareCanvas(canvas);
+  const pad = { top: 12, right: 12, bottom: 26, left: 30 };
+  const maxVal = Math.max(1, ...values);
+  drawAxes(ctx, w, h, pad, maxVal);
+
+  const plotW = w - pad.left - pad.right;
+  const plotH = h - pad.top - pad.bottom;
+  const slot = plotW / values.length;
+  const barW = Math.max(3, slot * 0.62);
+
+  for (let i = 0; i < values.length; i += 1) {
+    const cx = pad.left + slot * i + slot / 2;
+    const bH = (values[i] / maxVal) * plotH;
+    ctx.fillStyle = color;
+    ctx.fillRect(cx - barW / 2, pad.top + plotH - bH, barW, bH);
+    if (i % 2 === 0) {
+      ctx.fillStyle = '#8d9cb5';
+      ctx.textAlign = 'center';
+      ctx.fillText(labels[i], cx, h - 8);
+      ctx.textAlign = 'left';
+    }
+  }
+}
+
+let lastStats = null;
+
+function renderReports(stats) {
+  lastStats = stats;
+  els.rpRevenue.textContent = fmtMoney(stats.total_revenue, stats.currency);
+  els.rpSessions.textContent = stats.total_sessions;
+  els.rpAvgDuration.textContent = fmtDuration(stats.avg_duration_minutes);
+
+  let peakHour = 0;
+  let peakVal = -1;
+  stats.by_hour.forEach((v, h) => {
+    if (v > peakVal) { peakVal = v; peakHour = h; }
+  });
+  els.rpPeakHour.textContent = peakVal > 0 ? `${String(peakHour).padStart(2, '0')}:00` : '-';
+
+  const dailyLabels = stats.daily.map((d) => d.date.slice(5)); // MM-DD
+  drawGroupedBars(
+    els.dailyChartCanvas,
+    dailyLabels,
+    stats.daily.map((d) => d.checkins),
+    stats.daily.map((d) => d.checkouts)
+  );
+  const hourLabels = stats.by_hour.map((_, h) => String(h));
+  drawBars(els.hourChartCanvas, hourLabels, stats.by_hour, '#4f86ff');
+}
+
+async function refreshReports() {
+  const days = Number(els.reportsDays?.value || 7);
+  const stats = await api(`/api/dashboard/stats?days=${days}`);
+  renderReports(stats);
+}
+
 async function runHealthCheck(showNotice = true) {
   const started = new Date().toISOString();
   const data = await api('/health');
@@ -1097,8 +1329,11 @@ async function runHealthCheck(showNotice = true) {
 
 async function onCameraMutated() {
   await Promise.all([refreshDashboard(), refreshActiveSessions(), refreshRecentPlates()]);
-  if (appState.currentView === 'history') {
-    await refreshHistory();
+  if (appState.currentView === 'sessions') {
+    await refreshSessions();
+  }
+  if (appState.currentView === 'plates') {
+    await refreshPlates();
   }
 }
 
@@ -1131,14 +1366,26 @@ function switchView(viewName) {
   els.pageTitle.textContent = VIEW_META[viewName].title;
   els.pageDesc.textContent = VIEW_META[viewName].desc;
 
-  if (viewName === 'dashboard') {
+  if (viewName === 'cameras') {
     cameraModule.activateDashboardStreams();
   } else {
     cameraModule.deactivateDashboardStreams();
   }
 
-  if (viewName === 'history') {
-    refreshHistory().catch((err) => notify(`History lỗi: ${err.message}`, 'warn'));
+  if (viewName === 'overview') {
+    refreshDashboard().catch((err) => notify(`Overview lỗi: ${err.message}`, 'warn'));
+    refreshActiveSessions().catch(console.error);
+    refreshRecentPlates().catch(console.error);
+    loadParkingLots().catch(console.error);
+  }
+  if (viewName === 'sessions') {
+    refreshSessions().catch((err) => notify(`Sessions lỗi: ${err.message}`, 'warn'));
+  }
+  if (viewName === 'plates') {
+    refreshPlates().catch((err) => notify(`Plate reads lỗi: ${err.message}`, 'warn'));
+  }
+  if (viewName === 'reports') {
+    refreshReports().catch((err) => notify(`Reports lỗi: ${err.message}`, 'warn'));
   }
   if (viewName === 'ai') {
     refreshAiStatus().catch((err) => notify(`AI status lỗi: ${err.message}`, 'warn'));
@@ -1186,8 +1433,14 @@ function resetPolling() {
     refreshActiveSessions().catch(console.error);
     refreshRecentPlates().catch(console.error);
 
-    if (appState.currentView === 'history') {
-      refreshHistory().catch(console.error);
+    if (appState.currentView === 'overview') {
+      loadParkingLots().catch(console.error);
+    }
+    if (appState.currentView === 'sessions') {
+      refreshSessions().catch(console.error);
+    }
+    if (appState.currentView === 'plates') {
+      refreshPlates().catch(console.error);
     }
     if (appState.currentView === 'ai') {
       refreshAiStatus().catch(console.error);
@@ -1196,6 +1449,7 @@ function resetPolling() {
       refreshRfidEventLogs().catch(console.error);
     }
     if (appState.currentView === 'parking') {
+      loadParkingLots().catch(console.error);
       refreshSnapshotList().catch(console.error);
       if (lotDetailState.selectedLotId) {
         openParkingLotDetail(lotDetailState.selectedLotId).catch(console.error);
@@ -1229,6 +1483,11 @@ function bindEvents() {
   });
   els.sidebarOverlay.addEventListener('click', closeSidebarMobile);
   window.addEventListener('resize', applySidebarUiState);
+  window.addEventListener('resize', () => {
+    if (appState.currentView === 'reports' && lastStats) {
+      renderReports(lastStats);
+    }
+  });
   window.addEventListener('keydown', (ev) => {
     if (ev.key === 'Escape') {
       closeSidebarMobile();
@@ -1257,18 +1516,48 @@ function bindEvents() {
   });
 
   els.historyRefreshBtn.addEventListener('click', () => {
-    refreshHistory()
-      .then(() => notify('Đã làm mới history', 'success'))
-      .catch((err) => notify(`History lỗi: ${err.message}`, 'error'));
+    refreshSessions()
+      .then(() => notify('Đã làm mới phiên xe', 'success'))
+      .catch((err) => notify(`Sessions lỗi: ${err.message}`, 'error'));
   });
 
   els.historyActiveOnly.addEventListener('change', () => {
-    refreshHistory().catch((err) => notify(`History lỗi: ${err.message}`, 'error'));
+    refreshSessions().catch((err) => notify(`Sessions lỗi: ${err.message}`, 'error'));
   });
 
   els.historyLimit.addEventListener('change', () => {
-    refreshHistory().catch((err) => notify(`History lỗi: ${err.message}`, 'error'));
+    refreshSessions().catch((err) => notify(`Sessions lỗi: ${err.message}`, 'error'));
   });
+
+  if (els.sessionsSearch) {
+    els.sessionsSearch.addEventListener('input', renderSessionsTable);
+  }
+
+  if (els.platesSearch) {
+    els.platesSearch.addEventListener('input', renderPlatesTable);
+  }
+
+  if (els.platesRefreshBtn) {
+    els.platesRefreshBtn.addEventListener('click', () => {
+      refreshPlates()
+        .then(() => notify('Đã làm mới nhận diện', 'success'))
+        .catch((err) => notify(`Plate reads lỗi: ${err.message}`, 'error'));
+    });
+  }
+
+  if (els.reportsDays) {
+    els.reportsDays.addEventListener('change', () => {
+      refreshReports().catch((err) => notify(`Reports lỗi: ${err.message}`, 'error'));
+    });
+  }
+
+  if (els.reportsRefreshBtn) {
+    els.reportsRefreshBtn.addEventListener('click', () => {
+      refreshReports()
+        .then(() => notify('Đã làm mới báo cáo', 'success'))
+        .catch((err) => notify(`Reports lỗi: ${err.message}`, 'error'));
+    });
+  }
 
   els.rfidForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -1296,13 +1585,14 @@ function bindEvents() {
       appState.rfidLogs.unshift({ ...result, at: new Date().toISOString(), card_id: cardId });
       appState.rfidLogs = appState.rfidLogs.slice(0, 30);
       renderRfidLogs();
-      if (result.snapshot_path) {
-        showScanTick(`RFID ${result.status} thành công`);
-        notify(`RFID ${result.status} và đã capture ảnh`, 'success');
-      } else {
-        showScanTick(`RFID ${result.status} thành công`);
-        notify(`RFID ${result.status}`, 'success');
-      }
+
+      const feeText = (result.fee != null)
+        ? ` · Phí: ${fmtMoney(result.fee, result.currency || '')}${result.duration_minutes != null ? ' (' + fmtDuration(result.duration_minutes) + ')' : ''}`
+        : '';
+      showScanTick(`RFID ${result.status} thành công`);
+      const capText = result.snapshot_path ? ' và đã capture ảnh' : '';
+      const noticeType = result.status === 'plate_mismatch' ? 'warn' : 'success';
+      notify(`RFID ${result.status}${capText}${feeText}`, noticeType);
 
       els.rfidPlate.value = '';
       await onCameraMutated();
@@ -1346,6 +1636,7 @@ function bindEvents() {
         method,
         body: JSON.stringify({
           name,
+          capacity: els.lotCapacity && els.lotCapacity.value !== '' ? Number(els.lotCapacity.value) : 50,
           entry_camera_id: els.lotEntryCamera.value ? Number(els.lotEntryCamera.value) : null,
           exit_camera_id: els.lotExitCamera.value ? Number(els.lotExitCamera.value) : null,
           is_active: Boolean(els.lotIsActive.checked),
@@ -1525,7 +1816,6 @@ async function bootstrap() {
       refreshDashboard(),
       refreshActiveSessions(),
       refreshRecentPlates(),
-      refreshHistory(),
       refreshAiStatus(),
       refreshRfidEventLogs(),
       loadParkingLots().then(() => refreshSnapshotList())
@@ -1536,7 +1826,7 @@ async function bootstrap() {
     notify(`Không thể kết nối backend (${API_BASE}): ${err.message}`, 'error');
   }
 
-  switchView('dashboard');
+  switchView('overview');
   resetPolling();
 }
 

@@ -75,7 +75,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
 
     closeFocusSocket();
     const camera = findCameraById(cameraId);
-    if (!camera || !camera.enabled || state.currentView !== 'dashboard') {
+    if (!camera || !camera.enabled || state.currentView !== 'cameras') {
       els.focusPlaceholder.textContent = camera && !camera.enabled ? 'Camera đang tắt' : 'Đang chờ camera...';
       els.focusPlaceholder.style.display = 'block';
       return;
@@ -92,7 +92,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     ws.onclose = () => {
       const stillFocused = state.focusedCameraId === cameraId;
       const latest = findCameraById(cameraId);
-      if (stillFocused && latest && latest.enabled && state.currentView === 'dashboard') {
+      if (stillFocused && latest && latest.enabled && state.currentView === 'cameras') {
         setTimeout(() => openFocusSocket(cameraId), 1000);
       }
     };
@@ -104,7 +104,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
   function syncFocusedCamera() {
     for (const [id, view] of cameraViews.entries()) {
       view.setFocused(state.focusedCameraId === id);
-      view.setFocusStreamPaused(state.focusedCameraId === id && state.currentView === 'dashboard');
+      view.setFocusStreamPaused(state.focusedCameraId === id && state.currentView === 'cameras');
     }
 
     const focused = findCameraById(state.focusedCameraId);
@@ -115,7 +115,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     }
 
     renderFocusHeader();
-    if (state.currentView === 'dashboard') {
+    if (state.currentView === 'cameras') {
       openFocusSocket(focused.id);
     } else {
       closeFocusSocket();
@@ -271,7 +271,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     }
 
     function openSocket(cameraId) {
-      if (local.paused || local.pausedForFocus || state.currentView !== 'dashboard') return;
+      if (local.paused || local.pausedForFocus || state.currentView !== 'cameras') return;
 
       closeSocket();
       const ws = new WebSocket(`${WS_BASE}/ws/cameras/${cameraId}`);
@@ -283,7 +283,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       };
 
       ws.onclose = () => {
-        if (camera.enabled && !local.paused && !local.pausedForFocus && state.currentView === 'dashboard') {
+        if (camera.enabled && !local.paused && !local.pausedForFocus && state.currentView === 'cameras') {
           setTimeout(() => openSocket(cameraId), 1000);
         }
       };
@@ -355,7 +355,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
           return;
         }
 
-        if (!local.paused && !local.pausedForFocus && state.currentView === 'dashboard' && !local.ws) {
+        if (!local.paused && !local.pausedForFocus && state.currentView === 'cameras' && !local.ws) {
           openSocket(camera.id);
         }
       },
@@ -375,7 +375,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
           closeSocket();
           return;
         }
-        if (!local.paused && camera.enabled && state.currentView === 'dashboard' && !local.ws) {
+        if (!local.paused && camera.enabled && state.currentView === 'cameras' && !local.ws) {
           openSocket(camera.id);
         }
       },
@@ -420,7 +420,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       syncFocusedCamera();
     }
 
-    if (state.currentView !== 'dashboard') {
+    if (state.currentView !== 'cameras') {
       pauseAllCameraStreams();
     }
 

@@ -1,27 +1,39 @@
 export const VIEW_META = {
-  dashboard: {
-    title: 'Dashboard',
-    desc: 'Giám sát camera realtime, quản lý phiên xe và biển số.'
+  overview: {
+    title: 'Overview',
+    desc: 'Tổng quan hệ thống: chỉ số realtime, tỉ lệ lấp đầy và hoạt động gần đây.'
   },
-  history: {
-    title: 'History',
-    desc: 'Tra cứu lịch sử vào/ra và dữ liệu nhận diện biển số.'
-  },
-  logs: {
-    title: 'Logs',
-    desc: 'Theo dõi log RFID, nhận diện biển số và sự kiện xe vào/ra theo thời gian thực.'
+  cameras: {
+    title: 'Cameras',
+    desc: 'Quản lý toàn bộ camera: thêm/sửa/xóa, bật/tắt, xem live và phóng lớn.'
   },
   parking: {
     title: 'Parking Lots',
-    desc: 'Quản lý bãi xe, chỉ định camera vào/ra và trích xuất ảnh chụp theo phiên RFID.'
+    desc: 'Tạo bãi xe, chỉ định camera cổng vào/ra, theo dõi sức chứa và ảnh chụp.'
+  },
+  sessions: {
+    title: 'Sessions',
+    desc: 'Lịch sử phiên gửi xe, thời gian gửi và phí theo từng lượt.'
+  },
+  plates: {
+    title: 'Plate Reads',
+    desc: 'Lịch sử nhận diện biển số từ camera ANPR.'
+  },
+  reports: {
+    title: 'Reports',
+    desc: 'Thống kê lượt vào/ra, giờ cao điểm, thời gian gửi trung bình và doanh thu.'
+  },
+  logs: {
+    title: 'Logs',
+    desc: 'Nhật ký sự kiện hệ thống: RFID, nhận diện biển số, xe vào/ra.'
   },
   rfid: {
-    title: 'RFID Gate',
-    desc: 'Mô phỏng hoặc gửi sự kiện RFID qua HTTP để test luồng vào/ra.'
+    title: 'RFID Cards',
+    desc: 'Quản lý thẻ RFID và gửi sự kiện test luồng vào/ra.'
   },
   ai: {
     title: 'AI Center',
-    desc: 'Upload model và test nhận diện trên camera đang chạy.'
+    desc: 'Upload model nhận diện và test trên camera đang chạy.'
   },
   user: {
     title: 'User',
@@ -42,7 +54,7 @@ const STORAGE_KEYS = {
 };
 
 export const appState = {
-  currentView: 'dashboard',
+  currentView: 'overview',
   cameras: [],
   focusedCameraId: null,
   rfidLogs: [],

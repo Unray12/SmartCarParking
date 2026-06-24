@@ -244,8 +244,16 @@ def _handle_check_out(
         occurred_at=occurred_at,
     )
 
+    from app.modules.sessions.service import compute_duration_minutes, compute_fee
+
+    # Chốt phí & thời gian gửi tại thời điểm check-out rồi lưu vào DB (immutable).
+    duration = compute_duration_minutes(active_session.entry_time, occurred_at)
+    fee = compute_fee(active_session.entry_time, occurred_at)
+
     active_session.exit_time = occurred_at
     active_session.status = "out"
+    active_session.duration_minutes = duration
+    active_session.fee = fee
     if exit_camera_id:
         active_session.exit_camera_id = exit_camera_id
     if exit_snapshot_path:
@@ -253,7 +261,7 @@ def _handle_check_out(
     db.add(active_session)
     db.commit()
 
-    print(f"[RFID EVENT] Car OUT: card={payload.card_id}, plate={active_session.plate}")
+    print(f"[RFID EVENT] Car OUT: card={payload.card_id}, plate={active_session.plate}, fee={fee} ({duration}m)")
 
     return RfidEventResult(
         status="checked_out",
@@ -263,6 +271,9 @@ def _handle_check_out(
         card_id=payload.card_id,
         lot_id=active_session.lot_id,
         snapshot_path=active_session.exit_snapshot_path,
+        fee=fee,
+        currency=settings.parking_currency,
+        duration_minutes=duration,
     )
 
 

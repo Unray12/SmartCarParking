@@ -81,6 +81,7 @@ async def ws_camera_stream(websocket: WebSocket, camera_id: int) -> None:
                     await websocket.send_bytes(frame)
                     last_seq = seq
                     last_send_time = now
-            await asyncio.sleep(0.005)
+            # Tight poll → frames are forwarded promptly with minimal jitter.
+            await asyncio.sleep(0.002)
     except WebSocketDisconnect:
         return

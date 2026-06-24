@@ -98,7 +98,8 @@ class CameraWorker:
                 # OpenCV/FFmpeg backend reads this env var when opening VideoCapture.
                 os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = ffmpeg_opts
         cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 3)
+        # Buffer 1 frame only: always read the freshest frame → minimal latency.
+        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
         cap.set(cv2.CAP_PROP_FPS, self._config.target_fps)
         # Best-effort timeouts for unstable RTSP links (ignored by some backends).
         if hasattr(cv2, "CAP_PROP_OPEN_TIMEOUT_MSEC"):
@@ -150,11 +151,11 @@ class CameraWorker:
                 reconnect_backoff = min(reconnect_backoff * 1.4, 1.5)
                 continue
 
-            # Drop buffered frames and decode the freshest frame.
-            extra_grabs = max(1, self._config.capture_skip_grabs)
-            for _ in range(extra_grabs):
+            # The grab() above already pulled the freshest frame; decode THAT one
+            # so we deliver every frame (smoothness). Only skip extra frames when
+            # capture_skip_grabs > 0 (latency trim on unstable links).
+            for _ in range(max(0, self._config.capture_skip_grabs)):
                 cap.grab()
-                time.sleep(0.001)
 
             ok, frame = cap.retrieve()
             if not ok or frame is None:
@@ -181,8 +182,9 @@ class CameraWorker:
 
             frame_counter += 1
             elapsed = time.time() - loop_started
-            # Minimal sleep for max throughput
-            sleep_s = max(0.001, (1.0 / self._config.target_fps) - elapsed)
+            # Cap to target_fps. For RTSP, grab() already paces to the source
+            # rate so this usually sleeps ~0; no forced floor → no added latency.
+            sleep_s = (1.0 / self._config.target_fps) - elapsed
             if sleep_s > 0:
                 time.sleep(sleep_s)
 

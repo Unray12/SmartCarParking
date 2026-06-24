@@ -17,11 +17,11 @@ class Settings(BaseSettings):
     cors_origins: str = "*"
     plate_recognizer: str = ""
 
-    stream_target_fps: int = 12
+    stream_target_fps: int = 25
     stream_jpeg_quality: int = 82
     stream_max_width: int = 1280
     stream_capture_skip_grabs: int = 0
-    stream_ws_target_fps: int = 12
+    stream_ws_target_fps: int = 25
     stream_rtsp_transport: str = "tcp"
     stream_ffmpeg_capture_options: str = "fflags;nobuffer|flags;low_delay|reorder_queue_size;1024|max_delay;1000000|fflags;discardcorrupt|allowed_media_types;video"
     stream_infer_every_n_frames: int = 0

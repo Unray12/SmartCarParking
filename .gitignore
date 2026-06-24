@@ -11,6 +11,7 @@ snapshots_store/
 backend/snapshots_store/
 
 # Sensitive config / secrets
+CONTEXT.md
 .env
 .env.*
 !.env.example

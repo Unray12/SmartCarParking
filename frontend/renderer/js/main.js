@@ -138,7 +138,12 @@ const lotDetailState = {
   selectedLotId: null,
   entryWs: null,
   exitWs: null,
-  sharedWs: null
+  sharedWs: null,
+  // Track which camera each live socket is bound to so periodic refreshes
+  // don't tear down and reopen the stream (which caused the frame to blink).
+  streamEntryCamId: null,
+  streamExitCamId: null,
+  streamSharedCamId: null
 };
 const captureStatusTimers = {
   entry: null,
@@ -623,6 +628,11 @@ async function loadParkingLots() {
 
 function closeLotWs(ws) {
   if (!ws) return null;
+  // Drop handlers before closing so the onclose placeholder ("Mất kết nối
+  // camera") doesn't flash when we intentionally tear the socket down.
+  ws.onmessage = null;
+  ws.onclose = null;
+  ws.onerror = null;
   ws.close();
   return null;
 }
@@ -706,6 +716,49 @@ function closeLotDetailStreams() {
   lotDetailState.sharedWs = closeLotWs(lotDetailState.sharedWs);
   lotDetailState.entryWs = closeLotWs(lotDetailState.entryWs);
   lotDetailState.exitWs = closeLotWs(lotDetailState.exitWs);
+  lotDetailState.streamEntryCamId = null;
+  lotDetailState.streamExitCamId = null;
+  lotDetailState.streamSharedCamId = null;
+}
+
+// Only (re)connect the live sockets when the desired camera layout differs
+// from what's already streaming, or a socket has died. This keeps periodic
+// data refreshes from blinking the video.
+function ensureLotStreams(lot) {
+  const entryCam = lot.entry_camera_id || null;
+  const exitCam = lot.exit_camera_id || null;
+  const useShared = Boolean(entryCam && exitCam && entryCam === exitCam);
+
+  const wsAlive = (ws) =>
+    Boolean(ws) && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING);
+
+  if (useShared) {
+    const ok =
+      lotDetailState.streamSharedCamId === entryCam &&
+      wsAlive(lotDetailState.sharedWs) &&
+      !lotDetailState.entryWs &&
+      !lotDetailState.exitWs;
+    if (ok) return;
+  } else {
+    const entryOk = entryCam
+      ? lotDetailState.streamEntryCamId === entryCam && wsAlive(lotDetailState.entryWs)
+      : !lotDetailState.entryWs;
+    const exitOk = exitCam
+      ? lotDetailState.streamExitCamId === exitCam && wsAlive(lotDetailState.exitWs)
+      : !lotDetailState.exitWs;
+    if (entryOk && exitOk && !lotDetailState.sharedWs) return;
+  }
+
+  closeLotDetailStreams();
+  if (useShared) {
+    openSharedLotStream(entryCam);
+    lotDetailState.streamSharedCamId = entryCam;
+  } else {
+    openLotStream('entry', entryCam);
+    openLotStream('exit', exitCam);
+    lotDetailState.streamEntryCamId = entryCam;
+    lotDetailState.streamExitCamId = exitCam;
+  }
 }
 
 function openSharedLotStream(cameraId) {
@@ -890,13 +943,7 @@ async function openParkingLotDetail(lotId) {
   renderLotDetailLogs(data.sessions || []);
   renderLotLatestCaptures(data.snapshots || []);
 
-  closeLotDetailStreams();
-  if (data.lot.entry_camera_id && data.lot.exit_camera_id && data.lot.entry_camera_id === data.lot.exit_camera_id) {
-    openSharedLotStream(data.lot.entry_camera_id);
-  } else {
-    openLotStream('entry', data.lot.entry_camera_id);
-    openLotStream('exit', data.lot.exit_camera_id);
-  }
+  ensureLotStreams(data.lot);
 }
 
 async function refreshSnapshotList() {

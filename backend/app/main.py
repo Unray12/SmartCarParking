@@ -49,6 +49,11 @@ def _handle_rfid_from_usb(direction: str, card_id: str) -> None:
 async def lifespan(app: FastAPI):
     init_db()
 
+    # Seed tài khoản admin mặc định (admin/admin) nếu DB chưa có user.
+    from app.modules.auth.service import ensure_admin_seed
+    with SessionLocal() as db:
+        ensure_admin_seed(db)
+
     recognizer = load_plate_recognizer(settings.plate_recognizer)
     stream_config = StreamConfig(
         target_fps=settings.stream_target_fps,

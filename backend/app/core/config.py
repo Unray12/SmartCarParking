@@ -11,8 +11,9 @@ BACKEND_ROOT = Path(__file__).resolve().parents[2]
 class Settings(BaseSettings):
     app_name: str = "Smart Parking Backend"
     database_url: str
-    admin_username: str
-    admin_password: str
+    # Chỉ dùng làm giá trị SEED admin lần đầu (sau đó DB là nguồn sự thật, đổi qua API).
+    admin_username: str = "admin"
+    admin_password: str = "admin"
     rfid_link_window_seconds: int = 30
     cors_origins: str = "*"
     plate_recognizer: str = ""

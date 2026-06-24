@@ -81,8 +81,9 @@
             <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="3" y="4" width="18" height="7" rx="2"/><rect x="3" y="13" width="18" height="7" rx="2"/><path d="M7 7.5h.01M7 16.5h.01"/></svg>
             <span>System</span>
           </button>
-          <button class="nav-item" data-view="user" style="display:none">
-            <span>User</span>
+          <button class="nav-item" data-view="user">
+            <svg class="nav-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></svg>
+            <span>Tài khoản</span>
           </button>
         </nav>
 
@@ -551,26 +552,38 @@
           </article>
         </section>
 
-        <!-- ===================== USER (hidden) ===================== -->
+        <!-- ===================== ACCOUNT ===================== -->
         <section class="view" data-view-panel="user">
           <section class="view-grid two-col">
             <article class="panel">
-              <div class="panel-head"><h3>Login</h3></div>
-              <form id="userLoginForm" class="stack-form">
-                <input id="userName" placeholder="Username" required />
-                <input id="userPassword" type="password" placeholder="Password" required />
-                <p class="login-error" id="userLoginError"></p>
-                <button type="submit">Login</button>
-              </form>
-            </article>
-            <article class="panel">
-              <div class="panel-head"><h3>User session</h3></div>
+              <div class="panel-head"><h3>Phiên đăng nhập</h3></div>
               <div class="panel-content">
                 <p id="userStateText" class="muted">Chưa đăng nhập.</p>
-                <button class="ghost" id="logoutBtn" type="button">Logout</button>
+                <button class="ghost" id="logoutBtn" type="button">Đăng xuất</button>
               </div>
             </article>
+            <article class="panel">
+              <div class="panel-head"><h3>Đổi mật khẩu</h3></div>
+              <form id="changePwForm" class="stack-form">
+                <input id="cpOld" type="password" placeholder="Mật khẩu hiện tại" autocomplete="current-password" required />
+                <input id="cpNew" type="password" placeholder="Mật khẩu mới" autocomplete="new-password" required />
+                <input id="cpConfirm" type="password" placeholder="Nhập lại mật khẩu mới" autocomplete="new-password" required />
+                <p class="login-error" id="cpError"></p>
+                <button type="submit">Đổi mật khẩu</button>
+              </form>
+            </article>
           </section>
+
+          <article class="panel">
+            <div class="panel-head"><h3>Đặt lại mật khẩu (quản trị)</h3></div>
+            <form id="resetPwForm" class="stack-form">
+              <p class="muted">Tạm thời đặt lại không cần xác thực. Tính năng gửi OTP qua email sẽ bổ sung sau.</p>
+              <input id="resetUser" placeholder="Tên đăng nhập" required />
+              <input id="resetNew" type="password" placeholder="Mật khẩu mới" autocomplete="new-password" required />
+              <p class="login-error" id="resetError"></p>
+              <button type="submit">Đặt lại mật khẩu</button>
+            </form>
+          </article>
         </section>
 
         <!-- ===================== SETTINGS ===================== -->
@@ -620,18 +633,33 @@
       <span class="text" id="scanTickText">Quét RFID thành công</span>
     </div>
 
-    <div class="login-gate is-hidden" id="loginGate" style="display:none">
+    <div class="login-gate is-hidden" id="loginGate">
       <form class="login-card" id="loginGateForm">
         <h3>Đăng nhập hệ thống</h3>
-        <p class="muted">Vui lòng đăng nhập để truy cập dashboard.</p>
-        <label>Username
+        <p class="muted">Đăng nhập để truy cập dashboard. Mặc định: <strong>admin / admin</strong>.</p>
+        <label>Tên đăng nhập
           <input id="loginGateUsername" autocomplete="username" required />
         </label>
-        <label>Password
+        <label>Mật khẩu
           <input id="loginGatePassword" type="password" autocomplete="current-password" required />
         </label>
         <p class="login-error" id="loginGateError"></p>
         <button type="submit">Đăng nhập</button>
+        <button type="button" class="ghost" id="gateShowReset">Quên mật khẩu?</button>
+      </form>
+
+      <form class="login-card is-hidden" id="gateResetForm">
+        <h3>Đặt lại mật khẩu</h3>
+        <p class="muted">Tạm thời đặt lại không cần xác thực (OTP qua email sẽ bổ sung sau).</p>
+        <label>Tên đăng nhập
+          <input id="gateResetUser" autocomplete="username" required />
+        </label>
+        <label>Mật khẩu mới
+          <input id="gateResetNew" type="password" autocomplete="new-password" required />
+        </label>
+        <p class="login-error" id="gateResetError"></p>
+        <button type="submit">Đặt lại mật khẩu</button>
+        <button type="button" class="ghost" id="gateBackLogin">Quay lại đăng nhập</button>
       </form>
     </div>
 

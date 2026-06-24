@@ -129,12 +129,23 @@ const els = {
   aiCameraSelect: document.getElementById('aiCameraSelect'),
   aiTestResult: document.getElementById('aiTestResult'),
 
-  userLoginForm: document.getElementById('userLoginForm'),
-  userName: document.getElementById('userName'),
-  userPassword: document.getElementById('userPassword'),
-  userLoginError: document.getElementById('userLoginError'),
   userStateText: document.getElementById('userStateText'),
   logoutBtn: document.getElementById('logoutBtn'),
+  changePwForm: document.getElementById('changePwForm'),
+  cpOld: document.getElementById('cpOld'),
+  cpNew: document.getElementById('cpNew'),
+  cpConfirm: document.getElementById('cpConfirm'),
+  cpError: document.getElementById('cpError'),
+  resetPwForm: document.getElementById('resetPwForm'),
+  resetUser: document.getElementById('resetUser'),
+  resetNew: document.getElementById('resetNew'),
+  resetError: document.getElementById('resetError'),
+  gateShowReset: document.getElementById('gateShowReset'),
+  gateResetForm: document.getElementById('gateResetForm'),
+  gateResetUser: document.getElementById('gateResetUser'),
+  gateResetNew: document.getElementById('gateResetNew'),
+  gateResetError: document.getElementById('gateResetError'),
+  gateBackLogin: document.getElementById('gateBackLogin'),
 
   settingsForm: document.getElementById('settingsForm'),
   refreshSeconds: document.getElementById('refreshSeconds'),
@@ -326,10 +337,12 @@ function showLoginGate() {
 function hideLoginGate() {
   els.loginGate.classList.add('is-hidden');
   els.loginGateError.textContent = '';
-  if (els.userLoginError) {
-    els.userLoginError.textContent = '';
-  }
   els.loginGateForm.reset();
+  // Luôn reset về form đăng nhập (ẩn form reset).
+  if (els.gateResetForm) {
+    els.gateResetForm.classList.add('is-hidden');
+    els.loginGateForm.classList.remove('is-hidden');
+  }
 }
 
 function normalizeLoginError(message) {
@@ -355,7 +368,7 @@ function setFormSubmitState(form, submitting, idleText) {
     submitBtn.dataset.idleText = idleText || submitBtn.textContent || 'Submit';
   }
   submitBtn.disabled = submitting;
-  submitBtn.textContent = submitting ? 'Đang đăng nhập...' : submitBtn.dataset.idleText;
+  submitBtn.textContent = submitting ? 'Đang xử lý...' : submitBtn.dataset.idleText;
 }
 
 async function performLogin(username, password, errorTarget) {
@@ -373,6 +386,7 @@ async function performLogin(username, password, errorTarget) {
     renderUserState();
     hideLoginGate();
     notify('Đăng nhập thành công', 'success');
+    await startApp();
     return true;
   } catch (err) {
     const message = normalizeLoginError(err?.message);
@@ -1728,37 +1742,65 @@ function bindEvents() {
     }
   });
 
-  els.userLoginForm.addEventListener('submit', async (ev) => {
+  // ---- Đổi mật khẩu (cần mật khẩu hiện tại) ----
+  els.changePwForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
-    if (els.userLoginError) {
-      els.userLoginError.textContent = '';
-    }
-    const username = els.userName.value.trim();
-    const password = els.userPassword.value.trim();
-
-    if (!username || !password) {
-      if (els.userLoginError) {
-        els.userLoginError.textContent = 'Nhập đầy đủ username và password.';
-      }
-      notify('Nhập đầy đủ username và password', 'warn');
+    els.cpError.textContent = '';
+    const oldPw = els.cpOld.value;
+    const newPw = els.cpNew.value;
+    const confirmPw = els.cpConfirm.value;
+    if (!oldPw || !newPw) {
+      els.cpError.textContent = 'Nhập đầy đủ mật khẩu.';
       return;
     }
+    if (newPw !== confirmPw) {
+      els.cpError.textContent = 'Mật khẩu mới không khớp.';
+      return;
+    }
+    try {
+      await api('/api/auth/change-password', {
+        method: 'POST',
+        body: JSON.stringify({ username: appState.user.username, old_password: oldPw, new_password: newPw })
+      });
+      els.changePwForm.reset();
+      notify('Đổi mật khẩu thành công', 'success');
+    } catch (err) {
+      els.cpError.textContent = err.message;
+      notify(`Đổi mật khẩu lỗi: ${err.message}`, 'error');
+    }
+  });
 
-    setFormSubmitState(els.userLoginForm, true, 'Login');
-    const ok = await performLogin(username, password, els.userLoginError);
-    setFormSubmitState(els.userLoginForm, false, 'Login');
-    if (ok) {
-      els.userLoginForm.reset();
+  // ---- Đặt lại mật khẩu (quản trị, không điều kiện) ----
+  els.resetPwForm.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    els.resetError.textContent = '';
+    const username = els.resetUser.value.trim();
+    const newPw = els.resetNew.value;
+    if (!username || !newPw) {
+      els.resetError.textContent = 'Nhập đầy đủ tên đăng nhập và mật khẩu mới.';
+      return;
+    }
+    try {
+      await api('/api/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ username, new_password: newPw })
+      });
+      els.resetPwForm.reset();
+      notify(`Đã đặt lại mật khẩu cho ${username}`, 'success');
+    } catch (err) {
+      els.resetError.textContent = err.message;
+      notify(`Đặt lại mật khẩu lỗi: ${err.message}`, 'error');
     }
   });
 
   els.logoutBtn.addEventListener('click', () => {
+    stopApp();
     appState.user.username = '';
     setAuthSession('');
     renderUserState();
     showLoginGate();
     closeSidebarMobile();
-    notify('Đã logout', 'success');
+    notify('Đã đăng xuất', 'success');
   });
 
   els.loginGateForm.addEventListener('submit', async (ev) => {
@@ -1773,6 +1815,47 @@ function bindEvents() {
     setFormSubmitState(els.loginGateForm, true, 'Đăng nhập');
     await performLogin(username, password, els.loginGateError);
     setFormSubmitState(els.loginGateForm, false, 'Đăng nhập');
+  });
+
+  // ---- Toggle form reset trong gate ----
+  els.gateShowReset.addEventListener('click', () => {
+    els.loginGateForm.classList.add('is-hidden');
+    els.gateResetForm.classList.remove('is-hidden');
+    els.gateResetError.textContent = '';
+    els.gateResetUser.focus();
+  });
+
+  els.gateBackLogin.addEventListener('click', () => {
+    els.gateResetForm.classList.add('is-hidden');
+    els.loginGateForm.classList.remove('is-hidden');
+  });
+
+  els.gateResetForm.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    els.gateResetError.textContent = '';
+    const username = els.gateResetUser.value.trim();
+    const newPw = els.gateResetNew.value;
+    if (!username || !newPw) {
+      els.gateResetError.textContent = 'Nhập đầy đủ tên đăng nhập và mật khẩu mới.';
+      return;
+    }
+    setFormSubmitState(els.gateResetForm, true, 'Đặt lại mật khẩu');
+    try {
+      await api('/api/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ username, new_password: newPw })
+      });
+      notify('Đặt lại mật khẩu thành công, hãy đăng nhập lại', 'success');
+      els.gateResetForm.reset();
+      els.gateResetForm.classList.add('is-hidden');
+      els.loginGateForm.classList.remove('is-hidden');
+      els.loginGateUsername.value = username;
+      els.loginGatePassword.focus();
+    } catch (err) {
+      els.gateResetError.textContent = err.message;
+    } finally {
+      setFormSubmitState(els.gateResetForm, false, 'Đặt lại mật khẩu');
+    }
   });
 
   els.settingsForm.addEventListener('submit', (ev) => {
@@ -1794,21 +1877,12 @@ function bindEvents() {
   });
 }
 
-async function bootstrap() {
-  loadStorage(appState);
-  // TEMP: deactive login - skip auth check
-  appState.user.username = 'guest';
-  setAuthSession('guest');
-  hideLoginGate();
-  // END TEMP
-  applySettingsToForm();
-  applySidebarUiState();
-  renderUserState();
-  bindEvents();
-  cameraModule.init();
-  logModule.init();
-  resetLotForm();
-  renderRfidLogs();
+let appStarted = false;
+
+// Tải dữ liệu + bật polling/stream. Chỉ chạy SAU khi đã đăng nhập.
+async function startApp() {
+  if (appStarted) return;
+  appStarted = true;
 
   try {
     await Promise.all([
@@ -1828,6 +1902,35 @@ async function bootstrap() {
 
   switchView('overview');
   resetPolling();
+}
+
+// Dừng polling + đóng stream khi đăng xuất.
+function stopApp() {
+  appStarted = false;
+  if (mainPoll) { clearInterval(mainPoll); mainPoll = null; }
+  if (cameraPoll) { clearInterval(cameraPoll); cameraPoll = null; }
+  cameraModule.deactivateDashboardStreams();
+}
+
+async function bootstrap() {
+  loadStorage(appState);
+  applySettingsToForm();
+  applySidebarUiState();
+  bindEvents();
+  cameraModule.init();
+  logModule.init();
+  resetLotForm();
+  renderRfidLogs();
+
+  if (isAuthenticated()) {
+    appState.user.username = sessionStorage.getItem(AUTH_USER_KEY) || '';
+    renderUserState();
+    hideLoginGate();
+    await startApp();
+  } else {
+    renderUserState();
+    showLoginGate();
+  }
 }
 
 bootstrap();

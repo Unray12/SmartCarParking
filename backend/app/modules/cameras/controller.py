@@ -17,15 +17,19 @@ from app.modules.cameras.service import (
 )
 from app.services.camera_stream import CameraStreamManager
 
-router = APIRouter(tags=["cameras"])
+# REST router (sẽ được gắn prefix /api/v1 + bảo vệ token ở router.py)
+router = APIRouter(prefix="/cameras", tags=["cameras"])
+
+# WebSocket router riêng — KHÔNG nằm dưới /api/v1, KHÔNG yêu cầu token (WS để mở).
+ws_router = APIRouter()
 
 
-@router.get("/api/cameras", response_model=list[CameraOut])
+@router.get("", response_model=list[CameraOut])
 def list_camera_endpoint(db: Session = Depends(get_db)) -> list[CameraOut]:
     return list_cameras(db)
 
 
-@router.post("/api/cameras", response_model=CameraOut)
+@router.post("", response_model=CameraOut)
 def create_camera_endpoint(
     payload: CameraCreate,
     db: Session = Depends(get_db),
@@ -34,7 +38,7 @@ def create_camera_endpoint(
     return create_camera(db, payload, camera_manager)
 
 
-@router.patch("/api/cameras/{camera_id}", response_model=CameraOut)
+@router.patch("/{camera_id}", response_model=CameraOut)
 def toggle_camera_endpoint(
     camera_id: int,
     payload: CameraToggleRequest,
@@ -44,7 +48,7 @@ def toggle_camera_endpoint(
     return toggle_camera(db, camera_id, payload.enabled, camera_manager)
 
 
-@router.delete("/api/cameras/{camera_id}")
+@router.delete("/{camera_id}")
 def delete_camera_endpoint(
     camera_id: int,
     db: Session = Depends(get_db),
@@ -53,7 +57,7 @@ def delete_camera_endpoint(
     return delete_camera(db, camera_id, camera_manager)
 
 
-@router.put("/api/cameras/{camera_id}", response_model=CameraOut)
+@router.put("/{camera_id}", response_model=CameraOut)
 def update_camera_endpoint(
     camera_id: int,
     payload: CameraUpdateRequest,
@@ -63,11 +67,11 @@ def update_camera_endpoint(
     return update_camera(db, camera_id, payload, camera_manager)
 
 
-@router.websocket("/ws/cameras/{camera_id}")
+@ws_router.websocket("/ws/cameras/{camera_id}")
 async def ws_camera_stream(websocket: WebSocket, camera_id: int) -> None:
     await websocket.accept()
     camera_manager: CameraStreamManager = websocket.app.state.camera_manager
-    ws_target_fps = int(getattr(websocket.app.state, "stream_ws_target_fps", 12))
+    ws_target_fps = int(getattr(websocket.app.state, "stream_ws_target_fps", 25))
     last_seq = 0
     last_send_time = 0.0
     min_interval = 1.0 / max(1, ws_target_fps)

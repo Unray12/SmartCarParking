@@ -6,6 +6,29 @@ export const API_BASE = (
 
 export const WS_BASE = API_BASE.replace(/^http/i, 'ws');
 
+// ---- JWT token (Bearer) ----
+const TOKEN_KEY = 'scp_token';
+const USER_KEY = 'scp_user';
+
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY) || '';
+}
+export function setToken(token, username) {
+  localStorage.setItem(TOKEN_KEY, token || '');
+  if (username != null) localStorage.setItem(USER_KEY, username);
+}
+export function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+  localStorage.removeItem(USER_KEY);
+}
+export function getStoredUser() {
+  return localStorage.getItem(USER_KEY) || '';
+}
+
+function isPublicAuthPath(path) {
+  return path.includes('/auth/login') || path.includes('/auth/reset-password');
+}
+
 export async function api(path, options = {}) {
   const requestOptions = { ...options };
   const method = (requestOptions.method || 'GET').toUpperCase();
@@ -15,6 +38,10 @@ export async function api(path, options = {}) {
 
   if (!(requestOptions.body instanceof FormData)) {
     headers['Content-Type'] = headers['Content-Type'] || 'application/json';
+  }
+  const token = getToken();
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
   }
   if (method === 'GET') {
     requestOptions.cache = 'no-store';
@@ -36,6 +63,14 @@ export async function api(path, options = {}) {
 
   try {
     const response = await fetch(url, requestOptions);
+
+    // Token hết hạn / không hợp lệ → về trang login (trừ chính các API public của login).
+    if (response.status === 401 && !isPublicAuthPath(path)) {
+      clearToken();
+      if (!window.location.pathname.startsWith('/login')) {
+        window.location.replace('/login');
+      }
+    }
 
     if (!response.ok) {
       const clone = response.clone();

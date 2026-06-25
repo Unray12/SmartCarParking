@@ -387,6 +387,23 @@ tbody tr:hover td { background: rgba(79, 134, 255, 0.07); }
 
 .sidebar-overlay { display: none; position: fixed; inset: 0; border: 0; background: rgba(3, 9, 15, 0.5); z-index: 1100; }
 
+/* ============================ Trang đăng nhập riêng ============================ */
+.auth-page {
+  min-height: 100vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 18px; padding: 24px;
+}
+.auth-brand { display: flex; align-items: center; gap: 12px; }
+.auth-brand h1 { margin: 0; font-size: 1.2rem; letter-spacing: 0.2px; }
+.auth-brand p { margin: 2px 0 0; color: var(--muted); font-size: 0.78rem; }
+.auth-page .login-card { width: min(400px, 100%); }
+.login-ok { min-height: 18px; color: #8ff0dd; font-size: 0.85rem; }
+.link-btn {
+  background: none; border: none; box-shadow: none; color: var(--accent-2);
+  font-weight: 600; cursor: pointer; padding: 4px; min-height: auto;
+  justify-self: center; font-size: 0.88rem;
+}
+.link-btn:hover { filter: none; text-decoration: underline; color: var(--accent); }
+
 /* ============================ Responsive ============================ */
 @media (min-width: 720px) { .camera-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (min-width: 1040px) { .camera-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }

@@ -166,7 +166,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     }
 
     try {
-      await api(`/api/cameras/${editingCameraId}`, {
+      await api(`/api/v1/cameras/${editingCameraId}`, {
         method: 'PUT',
         body: JSON.stringify({ name, source_url: sourceUrl, enabled })
       });
@@ -293,7 +293,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
 
     async function toggleCamera() {
       try {
-        await api(`/api/cameras/${camera.id}`, {
+        await api(`/api/v1/cameras/${camera.id}`, {
           method: 'PATCH',
           body: JSON.stringify({ enabled: !camera.enabled })
         });
@@ -310,7 +310,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       if (!agreed) return;
 
       try {
-        await api(`/api/cameras/${camera.id}`, { method: 'DELETE' });
+        await api(`/api/v1/cameras/${camera.id}`, { method: 'DELETE' });
         if (state.focusedCameraId === camera.id) {
           clearFocusedCamera('Camera đang phóng lớn đã bị xóa');
         }
@@ -390,7 +390,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
   }
 
   async function loadCameras() {
-    const cameras = await api('/api/cameras');
+    const cameras = await api('/api/v1/cameras');
     state.cameras = cameras;
 
     const seen = new Set();

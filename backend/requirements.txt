@@ -9,3 +9,4 @@ numpy==2.2.6
 psycopg2-binary==2.9.10
 python-dotenv==1.1.1
 pyserial==3.5
+pyjwt==2.10.1

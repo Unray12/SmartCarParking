@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base, utcnow
@@ -10,6 +10,8 @@ from app.database.base import Base, utcnow
 
 class ParkingSession(Base):
     __tablename__ = "parking_sessions"
+    # Index phục vụ truy vấn occupancy (đếm xe đang gửi theo bãi) chạy mỗi lần poll.
+    __table_args__ = (Index("ix_sessions_lot_exit", "lot_id", "exit_time"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     plate: Mapped[str] = mapped_column(String(32), index=True, nullable=False)

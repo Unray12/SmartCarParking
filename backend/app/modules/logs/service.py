@@ -19,7 +19,7 @@ def _to_snapshot_url(path: str | None) -> str | None:
         return None
     folder = parts[-2]
     filename = parts[-1]
-    return f"/api/snapshots/files/{folder}/{filename}"
+    return f"/api/v1/snapshots/files/{folder}/{filename}"
 
 
 def get_recent_logs(db: Session, limit: int = 100, hours: int = 24) -> list[LogEntry]:

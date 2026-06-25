@@ -19,7 +19,7 @@ from app.services.camera_stream import CameraStreamManager
 router = APIRouter(tags=["rfid"])
 
 
-@router.post("/api/rfid/events", response_model=RfidEventResult)
+@router.post("/rfid-events", response_model=RfidEventResult)
 def ingest_rfid_event_endpoint(
     payload: RfidEventIn,
     db: Session = Depends(get_db),
@@ -28,12 +28,12 @@ def ingest_rfid_event_endpoint(
     return ingest_rfid_event(db, payload, camera_manager=camera_manager)
 
 
-@router.get("/api/rfid/cards", response_model=list[RfidCardOut])
+@router.get("/rfid/cards", response_model=list[RfidCardOut])
 def list_cards_endpoint(db: Session = Depends(get_db)) -> list[RfidCardOut]:
     return [RfidCardOut.model_validate(c) for c in list_rfid_cards(db)]
 
 
-@router.post("/api/rfid/cards", response_model=RfidCardOut)
+@router.post("/rfid/cards", response_model=RfidCardOut)
 def create_card_endpoint(payload: RfidCardCreate, db: Session = Depends(get_db)) -> RfidCardOut:
     existing = get_rfid_card(db, payload.card_id)
     if existing:
@@ -42,7 +42,7 @@ def create_card_endpoint(payload: RfidCardCreate, db: Session = Depends(get_db))
     return RfidCardOut.model_validate(card)
 
 
-@router.put("/api/rfid/cards/{card_id}", response_model=RfidCardOut)
+@router.put("/rfid/cards/{card_id}", response_model=RfidCardOut)
 def update_card_endpoint(card_id: str, payload: RfidCardUpdate, db: Session = Depends(get_db)) -> RfidCardOut:
     card = update_rfid_card(db, card_id, payload)
     if not card:
@@ -50,7 +50,7 @@ def update_card_endpoint(card_id: str, payload: RfidCardUpdate, db: Session = De
     return RfidCardOut.model_validate(card)
 
 
-@router.delete("/api/rfid/cards/{card_id}")
+@router.delete("/rfid/cards/{card_id}")
 def delete_card_endpoint(card_id: str, db: Session = Depends(get_db)) -> dict[str, bool]:
     ok = delete_rfid_card(db, card_id)
     if not ok:

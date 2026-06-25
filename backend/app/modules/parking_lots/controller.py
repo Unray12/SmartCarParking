@@ -20,21 +20,26 @@ from app.modules.parking_lots.service import (
     update_parking_lot,
 )
 
+# Protected router (gắn prefix /api/v1 + token ở router.py)
 router = APIRouter(tags=["parking-lots"])
 
+# Public router cho việc serve file ảnh — <img>/<a> trên browser KHÔNG gửi được
+# header Authorization, nên endpoint này để mở (giống WS).
+files_router = APIRouter(tags=["snapshots"])
 
-@router.get("/api/parking-lots", response_model=list[ParkingLotOut])
+
+@router.get("/parking-lots", response_model=list[ParkingLotOut])
 def list_parking_lots_endpoint(db: Session = Depends(get_db)) -> list[ParkingLotOut]:
     return list_parking_lots_with_occupancy(db)
 
 
-@router.post("/api/parking-lots", response_model=ParkingLotOut)
+@router.post("/parking-lots", response_model=ParkingLotOut)
 def create_parking_lot_endpoint(payload: ParkingLotCreate, db: Session = Depends(get_db)) -> ParkingLotOut:
     lot = create_parking_lot(db, payload)
     return lot_to_out(lot, 0)
 
 
-@router.put("/api/parking-lots/{lot_id}", response_model=ParkingLotOut)
+@router.put("/parking-lots/{lot_id}", response_model=ParkingLotOut)
 def update_parking_lot_endpoint(lot_id: int, payload: ParkingLotUpdate, db: Session = Depends(get_db)) -> ParkingLotOut:
     lot = update_parking_lot(db, lot_id, payload)
     if not lot:
@@ -42,7 +47,7 @@ def update_parking_lot_endpoint(lot_id: int, payload: ParkingLotUpdate, db: Sess
     return lot_to_out(lot)
 
 
-@router.delete("/api/parking-lots/{lot_id}")
+@router.delete("/parking-lots/{lot_id}")
 def delete_parking_lot_endpoint(lot_id: int, db: Session = Depends(get_db)) -> dict[str, bool]:
     ok = delete_parking_lot(db, lot_id)
     if not ok:
@@ -50,12 +55,12 @@ def delete_parking_lot_endpoint(lot_id: int, db: Session = Depends(get_db)) -> d
     return {"ok": True}
 
 
-@router.get("/api/snapshots", response_model=list[SnapshotItemOut])
+@router.get("/snapshots", response_model=list[SnapshotItemOut])
 def list_snapshots_endpoint(lot_id: int | None = None, limit: int = 100, db: Session = Depends(get_db)) -> list[SnapshotItemOut]:
     return list_snapshot_items(db, lot_id=lot_id, limit=limit)
 
 
-@router.get("/api/parking-lots/{lot_id}/overview", response_model=ParkingLotOverviewOut)
+@router.get("/parking-lots/{lot_id}/overview", response_model=ParkingLotOverviewOut)
 def parking_lot_overview_endpoint(lot_id: int, limit: int = 100, db: Session = Depends(get_db)) -> ParkingLotOverviewOut:
     overview = get_parking_lot_overview(db, lot_id=lot_id, limit=limit)
     if not overview:
@@ -63,7 +68,7 @@ def parking_lot_overview_endpoint(lot_id: int, limit: int = 100, db: Session = D
     return overview
 
 
-@router.get("/api/snapshots/files/{folder}/{filename}", include_in_schema=False)
+@files_router.get("/snapshots/files/{folder}/{filename}", include_in_schema=False)
 def snapshot_file_endpoint(folder: str, filename: str) -> FileResponse:
     settings = get_settings()
     root = (Path(__file__).resolve().parents[3] / settings.snapshot_store_dir).resolve()

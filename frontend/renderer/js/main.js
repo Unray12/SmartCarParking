@@ -1,4 +1,4 @@
-import { api, API_BASE } from './api.js';
+import { api, API_BASE, getToken, clearToken, getStoredUser } from './api.js';
 import { appState, VIEW_META, loadStorage, saveSettings } from './state.js';
 import { createCameraModule } from './camera.js';
 import { createLogModule } from './logs.js';
@@ -9,11 +9,6 @@ const els = {
   sidebarToggleBtn: document.getElementById('sidebarToggleBtn'),
   sidebarExpandBtn: document.getElementById('sidebarExpandBtn'),
   sidebarOverlay: document.getElementById('sidebarOverlay'),
-  loginGate: document.getElementById('loginGate'),
-  loginGateForm: document.getElementById('loginGateForm'),
-  loginGateUsername: document.getElementById('loginGateUsername'),
-  loginGatePassword: document.getElementById('loginGatePassword'),
-  loginGateError: document.getElementById('loginGateError'),
   pageTitle: document.getElementById('pageTitle'),
   pageDesc: document.getElementById('pageDesc'),
   globalNotice: document.getElementById('globalNotice'),
@@ -140,12 +135,6 @@ const els = {
   resetUser: document.getElementById('resetUser'),
   resetNew: document.getElementById('resetNew'),
   resetError: document.getElementById('resetError'),
-  gateShowReset: document.getElementById('gateShowReset'),
-  gateResetForm: document.getElementById('gateResetForm'),
-  gateResetUser: document.getElementById('gateResetUser'),
-  gateResetNew: document.getElementById('gateResetNew'),
-  gateResetError: document.getElementById('gateResetError'),
-  gateBackLogin: document.getElementById('gateBackLogin'),
 
   settingsForm: document.getElementById('settingsForm'),
   refreshSeconds: document.getElementById('refreshSeconds'),
@@ -160,8 +149,6 @@ let noticeTimeout = null;
 let scanTickTimeout = null;
 let mainPoll = null;
 let cameraPoll = null;
-const AUTH_FLAG_KEY = 'scp_auth_ok';
-const AUTH_USER_KEY = 'scp_auth_user';
 const lotDetailState = {
   selectedLotId: null,
   entryWs: null,
@@ -314,88 +301,12 @@ function closeSidebarMobile() {
   applySidebarUiState();
 }
 
-function setAuthSession(username) {
-  if (username) {
-    sessionStorage.setItem(AUTH_FLAG_KEY, '1');
-    sessionStorage.setItem(AUTH_USER_KEY, username);
-    return;
-  }
-  sessionStorage.removeItem(AUTH_FLAG_KEY);
-  sessionStorage.removeItem(AUTH_USER_KEY);
-}
-
 function isAuthenticated() {
-  return sessionStorage.getItem(AUTH_FLAG_KEY) === '1';
+  return Boolean(getToken());
 }
 
-function showLoginGate() {
-  els.loginGate.classList.remove('is-hidden');
-  els.loginGateError.textContent = '';
-  els.loginGateUsername.focus();
-}
-
-function hideLoginGate() {
-  els.loginGate.classList.add('is-hidden');
-  els.loginGateError.textContent = '';
-  els.loginGateForm.reset();
-  // Luôn reset về form đăng nhập (ẩn form reset).
-  if (els.gateResetForm) {
-    els.gateResetForm.classList.add('is-hidden');
-    els.loginGateForm.classList.remove('is-hidden');
-  }
-}
-
-function normalizeLoginError(message) {
-  const msg = String(message || '').trim();
-  if (!msg) return 'Đăng nhập thất bại.';
-  if (msg.includes('Failed to fetch')) {
-    return `Không kết nối được backend (${API_BASE}).`;
-  }
-  if (msg.includes('Request timeout')) {
-    return 'Kết nối backend quá chậm (timeout), vui lòng thử lại.';
-  }
-  if (msg.includes('HTTP 404')) {
-    return 'Backend chưa có API đăng nhập. Hãy restart backend phiên bản mới.';
-  }
-  return msg;
-}
-
-function setFormSubmitState(form, submitting, idleText) {
-  if (!form) return;
-  const submitBtn = form.querySelector('button[type="submit"]');
-  if (!submitBtn) return;
-  if (!submitBtn.dataset.idleText) {
-    submitBtn.dataset.idleText = idleText || submitBtn.textContent || 'Submit';
-  }
-  submitBtn.disabled = submitting;
-  submitBtn.textContent = submitting ? 'Đang xử lý...' : submitBtn.dataset.idleText;
-}
-
-async function performLogin(username, password, errorTarget) {
-  if (errorTarget) {
-    errorTarget.textContent = '';
-  }
-
-  try {
-    const res = await api('/api/auth/login', {
-      method: 'POST',
-      body: JSON.stringify({ username, password })
-    });
-    appState.user.username = res.username || username;
-    setAuthSession(appState.user.username);
-    renderUserState();
-    hideLoginGate();
-    notify('Đăng nhập thành công', 'success');
-    await startApp();
-    return true;
-  } catch (err) {
-    const message = normalizeLoginError(err?.message);
-    if (errorTarget) {
-      errorTarget.textContent = message;
-    }
-    notify(message, 'error');
-    return false;
-  }
+function goToLogin() {
+  window.location.replace('/login');
 }
 
 function renderAiCameraOptions() {
@@ -423,7 +334,7 @@ function renderAiCameraOptions() {
 }
 
 async function refreshDashboard() {
-  const summary = await api('/api/dashboard/summary');
+  const summary = await api('/api/v1/dashboard/summary');
   els.mCamerasTotal.textContent = summary.cameras_total;
   els.mCamerasOn.textContent = summary.cameras_enabled;
   els.mActive.textContent = summary.active_sessions;
@@ -443,7 +354,7 @@ async function refreshDashboard() {
 }
 
 async function refreshActiveSessions() {
-  const sessions = await api('/api/sessions?active_only=true&limit=20');
+  const sessions = await api('/api/v1/sessions?active_only=true&limit=20');
   els.sessionBody.innerHTML = '';
 
   if (!sessions.length) {
@@ -464,7 +375,7 @@ async function refreshActiveSessions() {
 }
 
 async function refreshRecentPlates() {
-  const plates = await api('/api/plates/recent?limit=25');
+  const plates = await api('/api/v1/plates?limit=25');
   els.plateBody.innerHTML = '';
 
   if (!plates.length) {
@@ -546,13 +457,13 @@ function renderPlatesTable() {
 async function refreshSessions() {
   const limit = Number(els.historyLimit.value || 50);
   const activeOnly = els.historyActiveOnly.checked;
-  allSessions = await api(`/api/sessions?active_only=${activeOnly}&limit=${limit}`);
+  allSessions = await api(`/api/v1/sessions?active_only=${activeOnly}&limit=${limit}`);
   renderSessionsTable();
 }
 
 async function refreshPlates() {
   const limit = Number(els.historyLimit?.value || 50);
-  allPlates = await api(`/api/plates/recent?limit=${limit}`);
+  allPlates = await api(`/api/v1/plates?limit=${limit}`);
   renderPlatesTable();
 }
 
@@ -734,7 +645,7 @@ function renderParkingLots(lots) {
       const lotId = btn.dataset.lotId;
       if (!confirm(`Xóa bãi xe #${lotId}?`)) return;
       try {
-        await api(`/api/parking-lots/${lotId}`, { method: 'DELETE' });
+        await api(`/api/v1/parking-lots/${lotId}`, { method: 'DELETE' });
         notify('Đã xóa bãi xe', 'success');
         await loadParkingLots();
         await refreshSnapshotList();
@@ -746,7 +657,7 @@ function renderParkingLots(lots) {
 }
 
 async function loadParkingLots() {
-  const lots = await api('/api/parking-lots');
+  const lots = await api('/api/v1/parking-lots');
   appState.parkingLots = lots;
   renderParkingLots(lots);
   renderLotFilterOptions(lots);
@@ -1063,7 +974,7 @@ function setCaptureStatusIdle() {
 }
 
 async function openParkingLotDetail(lotId) {
-  const data = await api(`/api/parking-lots/${lotId}/overview?limit=100`);
+  const data = await api(`/api/v1/parking-lots/${lotId}/overview?limit=100`);
   lotDetailState.selectedLotId = lotId;
   els.lotDetailTitle.textContent = `Chi tiết bãi xe: ${data.lot.name} (#${data.lot.id})`;
   els.lotDetailMeta.textContent = `Cam vào: ${cameraNameById(data.lot.entry_camera_id)} | Cam ra: ${cameraNameById(data.lot.exit_camera_id)}`;
@@ -1076,7 +987,7 @@ async function openParkingLotDetail(lotId) {
 async function refreshSnapshotList() {
   const lotId = els.snapshotLotFilter.value;
   const query = lotId ? `?lot_id=${lotId}&limit=100` : '?limit=100';
-  const rows = await api(`/api/snapshots${query}`);
+  const rows = await api(`/api/v1/snapshots${query}`);
 
   els.snapshotBody.innerHTML = '';
   if (!rows.length) {
@@ -1102,7 +1013,7 @@ async function refreshSnapshotList() {
 
 async function refreshRfidEventLogs() {
   try {
-    const logs = await api('/api/logs?hours=24&limit=50');
+    const logs = await api('/api/v1/logs?hours=24&limit=50');
     const mapped = [];
 
     for (const row of logs) {
@@ -1142,7 +1053,7 @@ async function refreshRfidEventLogs() {
 
 async function loadRfidCards() {
   try {
-    const cards = await api('/api/rfid/cards');
+    const cards = await api('/api/v1/rfid/cards');
     appState.rfidCards = cards;
     renderRfidCards();
   } catch (err) {
@@ -1176,7 +1087,7 @@ function renderRfidCards() {
       const cardId = btn.dataset.cardId;
       if (!confirm(`Xóa thẻ ${cardId}?`)) return;
       try {
-        await api(`/api/rfid/cards/${cardId}`, { method: 'DELETE' });
+        await api(`/api/v1/rfid/cards/${cardId}`, { method: 'DELETE' });
         notify('Xóa thẻ thành công', 'success');
         await loadRfidCards();
       } catch (err) {
@@ -1188,7 +1099,7 @@ function renderRfidCards() {
 
 async function refreshAiStatus() {
   try {
-    const data = await api('/api/ai/status');
+    const data = await api('/api/v1/ai/status');
     els.aiStatusText.textContent = `Recognizer: ${data.recognizer_name} | Models dir: ${data.models_dir}`;
     els.aiModelsList.innerHTML = '';
 
@@ -1328,7 +1239,7 @@ function renderReports(stats) {
 
 async function refreshReports() {
   const days = Number(els.reportsDays?.value || 7);
-  const stats = await api(`/api/dashboard/stats?days=${days}`);
+  const stats = await api(`/api/v1/dashboard/stats?days=${days}`);
   renderReports(stats);
 }
 
@@ -1442,27 +1353,24 @@ function resetPolling() {
 
   const ms = Math.max(2000, appState.settings.refreshSeconds * 1000);
 
+  // Chỉ poll dữ liệu của view đang xem để giảm tải DB (quan trọng trên NUC).
+  // 'logs' tự auto-refresh trong logModule; các view tĩnh (settings/system/user) không poll.
   mainPoll = setInterval(() => {
-    refreshDashboard().catch(console.error);
-    refreshActiveSessions().catch(console.error);
-    refreshRecentPlates().catch(console.error);
-
-    if (appState.currentView === 'overview') {
+    const view = appState.currentView;
+    if (view === 'overview') {
+      refreshDashboard().catch(console.error);
+      refreshActiveSessions().catch(console.error);
+      refreshRecentPlates().catch(console.error);
       loadParkingLots().catch(console.error);
-    }
-    if (appState.currentView === 'sessions') {
+    } else if (view === 'sessions') {
       refreshSessions().catch(console.error);
-    }
-    if (appState.currentView === 'plates') {
+    } else if (view === 'plates') {
       refreshPlates().catch(console.error);
-    }
-    if (appState.currentView === 'ai') {
+    } else if (view === 'ai') {
       refreshAiStatus().catch(console.error);
-    }
-    if (appState.currentView === 'rfid') {
+    } else if (view === 'rfid') {
       refreshRfidEventLogs().catch(console.error);
-    }
-    if (appState.currentView === 'parking') {
+    } else if (view === 'parking') {
       loadParkingLots().catch(console.error);
       refreshSnapshotList().catch(console.error);
       if (lotDetailState.selectedLotId) {
@@ -1515,7 +1423,7 @@ function bindEvents() {
     if (!name || !sourceUrl) return;
 
     try {
-      await api('/api/cameras', {
+      await api('/api/v1/cameras', {
         method: 'POST',
         body: JSON.stringify({ name, source_url: sourceUrl, enabled: true })
       });
@@ -1584,7 +1492,7 @@ function bindEvents() {
     if (!cardId) return;
 
     try {
-      const result = await api('/api/rfid/events', {
+      const result = await api('/api/v1/rfid-events', {
         method: 'POST',
         body: JSON.stringify({
           card_id: cardId,
@@ -1625,7 +1533,7 @@ function bindEvents() {
     if (!cardId || !plate) return;
 
     try {
-      await api('/api/rfid/cards', {
+      await api('/api/v1/rfid/cards', {
         method: 'POST',
         body: JSON.stringify({ card_id: cardId, plate, owner_name: owner || null })
       });
@@ -1643,7 +1551,7 @@ function bindEvents() {
     if (!name) return;
     const editId = els.lotEditId.value ? Number(els.lotEditId.value) : null;
     const method = editId ? 'PUT' : 'POST';
-    const path = editId ? `/api/parking-lots/${editId}` : '/api/parking-lots';
+    const path = editId ? `/api/v1/parking-lots/${editId}` : '/api/v1/parking-lots';
 
     try {
       await api(path, {
@@ -1703,7 +1611,7 @@ function bindEvents() {
     try {
       const form = new FormData();
       form.append('file', file);
-      const result = await api('/api/ai/upload-model', {
+      const result = await api('/api/v1/ai/models', {
         method: 'POST',
         body: form
       });
@@ -1725,7 +1633,7 @@ function bindEvents() {
     }
 
     try {
-      const result = await api('/api/ai/test-camera', {
+      const result = await api('/api/v1/ai/test-camera', {
         method: 'POST',
         body: JSON.stringify({ camera_id: cameraId })
       });
@@ -1758,9 +1666,9 @@ function bindEvents() {
       return;
     }
     try {
-      await api('/api/auth/change-password', {
+      await api('/api/v1/auth/change-password', {
         method: 'POST',
-        body: JSON.stringify({ username: appState.user.username, old_password: oldPw, new_password: newPw })
+        body: JSON.stringify({ old_password: oldPw, new_password: newPw })
       });
       els.changePwForm.reset();
       notify('Đổi mật khẩu thành công', 'success');
@@ -1781,7 +1689,7 @@ function bindEvents() {
       return;
     }
     try {
-      await api('/api/auth/reset-password', {
+      await api('/api/v1/auth/reset-password', {
         method: 'POST',
         body: JSON.stringify({ username, new_password: newPw })
       });
@@ -1796,66 +1704,9 @@ function bindEvents() {
   els.logoutBtn.addEventListener('click', () => {
     stopApp();
     appState.user.username = '';
-    setAuthSession('');
-    renderUserState();
-    showLoginGate();
-    closeSidebarMobile();
+    clearToken();
     notify('Đã đăng xuất', 'success');
-  });
-
-  els.loginGateForm.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    els.loginGateError.textContent = '';
-    const username = els.loginGateUsername.value.trim();
-    const password = els.loginGatePassword.value.trim();
-    if (!username || !password) {
-      els.loginGateError.textContent = 'Nhập đầy đủ username và password.';
-      return;
-    }
-    setFormSubmitState(els.loginGateForm, true, 'Đăng nhập');
-    await performLogin(username, password, els.loginGateError);
-    setFormSubmitState(els.loginGateForm, false, 'Đăng nhập');
-  });
-
-  // ---- Toggle form reset trong gate ----
-  els.gateShowReset.addEventListener('click', () => {
-    els.loginGateForm.classList.add('is-hidden');
-    els.gateResetForm.classList.remove('is-hidden');
-    els.gateResetError.textContent = '';
-    els.gateResetUser.focus();
-  });
-
-  els.gateBackLogin.addEventListener('click', () => {
-    els.gateResetForm.classList.add('is-hidden');
-    els.loginGateForm.classList.remove('is-hidden');
-  });
-
-  els.gateResetForm.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    els.gateResetError.textContent = '';
-    const username = els.gateResetUser.value.trim();
-    const newPw = els.gateResetNew.value;
-    if (!username || !newPw) {
-      els.gateResetError.textContent = 'Nhập đầy đủ tên đăng nhập và mật khẩu mới.';
-      return;
-    }
-    setFormSubmitState(els.gateResetForm, true, 'Đặt lại mật khẩu');
-    try {
-      await api('/api/auth/reset-password', {
-        method: 'POST',
-        body: JSON.stringify({ username, new_password: newPw })
-      });
-      notify('Đặt lại mật khẩu thành công, hãy đăng nhập lại', 'success');
-      els.gateResetForm.reset();
-      els.gateResetForm.classList.add('is-hidden');
-      els.loginGateForm.classList.remove('is-hidden');
-      els.loginGateUsername.value = username;
-      els.loginGatePassword.focus();
-    } catch (err) {
-      els.gateResetError.textContent = err.message;
-    } finally {
-      setFormSubmitState(els.gateResetForm, false, 'Đặt lại mật khẩu');
-    }
+    goToLogin();
   });
 
   els.settingsForm.addEventListener('submit', (ev) => {
@@ -1913,24 +1764,33 @@ function stopApp() {
 }
 
 async function bootstrap() {
+  // Token-gate: chưa đăng nhập → chuyển sang trang login riêng.
+  if (!isAuthenticated()) {
+    goToLogin();
+    return;
+  }
+
   loadStorage(appState);
+  appState.user.username = getStoredUser();
   applySettingsToForm();
   applySidebarUiState();
+  renderUserState();
   bindEvents();
   cameraModule.init();
   logModule.init();
   resetLotForm();
   renderRfidLogs();
 
-  if (isAuthenticated()) {
-    appState.user.username = sessionStorage.getItem(AUTH_USER_KEY) || '';
+  // Xác thực token + lấy username hiện tại; token hỏng → api() tự redirect /login.
+  try {
+    const me = await api('/api/v1/auth/me');
+    appState.user.username = me.username;
     renderUserState();
-    hideLoginGate();
-    await startApp();
-  } else {
-    renderUserState();
-    showLoginGate();
+  } catch {
+    return; // 401 đã được api() xử lý (redirect)
   }
+
+  await startApp();
 }
 
 bootstrap();

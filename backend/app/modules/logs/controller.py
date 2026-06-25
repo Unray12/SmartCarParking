@@ -6,10 +6,10 @@ from sqlalchemy.orm import Session
 from app.database.session import get_db
 from app.modules.logs.service import get_recent_logs
 
-router = APIRouter(tags=["logs"])
+router = APIRouter(prefix="/logs", tags=["logs"])
 
 
-@router.get("/api/logs")
+@router.get("")
 def list_logs(limit: int = 50, hours: int = 24, db: Session = Depends(get_db)) -> list[dict]:
     safe_limit = max(1, min(limit, 500))
     safe_hours = max(1, min(hours, 168))

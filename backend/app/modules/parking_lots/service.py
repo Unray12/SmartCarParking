@@ -107,7 +107,7 @@ def resolve_snapshot_path_to_url(absolute_or_relative_path: str) -> str:
     p = Path(absolute_or_relative_path)
     filename = p.name
     parent = p.parent.name
-    return f"/api/snapshots/files/{parent}/{filename}"
+    return f"/api/v1/snapshots/files/{parent}/{filename}"
 
 
 def list_snapshot_items(db: Session, lot_id: int | None, limit: int = 100) -> list[SnapshotItemOut]:

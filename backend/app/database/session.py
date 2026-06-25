@@ -12,14 +12,15 @@ settings = get_settings()
 DATABASE_URL = settings.database_url
 
 connect_args: dict[str, object] = {}
+engine_kwargs: dict[str, object] = {"pool_pre_ping": True}
 if DATABASE_URL.startswith("sqlite"):
     connect_args = {"check_same_thread": False}
+else:
+    # Pool gọn cho máy yếu (NUC): đủ cho stream worker + request, tự tái tạo
+    # kết nối cũ tránh "server closed the connection".
+    engine_kwargs.update(pool_size=5, max_overflow=10, pool_recycle=1800, pool_timeout=30)
 
-engine = create_engine(
-    DATABASE_URL,
-    connect_args=connect_args,
-    pool_pre_ping=True,
-)
+engine = create_engine(DATABASE_URL, connect_args=connect_args, **engine_kwargs)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, autocommit=False)
 
 
@@ -64,3 +65,8 @@ def _ensure_runtime_schema() -> None:
         if "capacity" not in lot_cols:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE parking_lots ADD COLUMN capacity INTEGER DEFAULT 50 NOT NULL"))
+
+    # Index occupancy (idempotent). Postgres/SQLite đều hỗ trợ IF NOT EXISTS.
+    if "parking_sessions" in tables:
+        with engine.begin() as conn:
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sessions_lot_exit ON parking_sessions (lot_id, exit_time)"))

@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="vi">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Đăng nhập · Smart Parking</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="auth-page">
+      <div class="auth-brand">
+        <div class="brand-mark">P</div>
+        <div>
+          <h1>SmartCar Parking</h1>
+          <p>Camera · RFID · AI Plate</p>
+        </div>
+      </div>
+
+      <form class="login-card" id="loginForm">
+        <h3>Đăng nhập hệ thống</h3>
+        <p class="muted">Mặc định: <strong>admin / admin</strong></p>
+        <label>Tên đăng nhập
+          <input id="loginUsername" autocomplete="username" required />
+        </label>
+        <label>Mật khẩu
+          <input id="loginPassword" type="password" autocomplete="current-password" required />
+        </label>
+        <p class="login-error" id="loginError"></p>
+        <p class="login-ok" id="loginOk"></p>
+        <button type="submit">Đăng nhập</button>
+        <button type="button" class="link-btn" id="showReset">Quên mật khẩu?</button>
+      </form>
+    </div>
+
+    <!-- Modal đặt lại mật khẩu -->
+    <div class="modal is-hidden" id="resetModal">
+      <div class="modal-card">
+        <div class="panel-head inline">
+          <h3>Đặt lại mật khẩu</h3>
+          <button class="ghost" id="resetClose" type="button">Đóng</button>
+        </div>
+        <form class="stack-form panel-content" id="resetForm">
+          <p class="muted">Tạm thời đặt lại không cần xác thực (OTP qua email sẽ bổ sung sau).</p>
+          <label>Tên đăng nhập
+            <input id="resetUsername" autocomplete="username" required />
+          </label>
+          <label>Mật khẩu mới
+            <input id="resetNewPassword" type="password" autocomplete="new-password" required />
+          </label>
+          <p class="login-error" id="resetError"></p>
+          <div class="modal-actions">
+            <button type="button" class="ghost" id="resetCancel">Hủy</button>
+            <button type="submit">Đặt lại mật khẩu</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <script src="config.js"></script>
+    <script type="module" src="js/login.js"></script>
+  </body>
+</html>

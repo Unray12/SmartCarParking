@@ -633,36 +633,6 @@
       <span class="text" id="scanTickText">Quét RFID thành công</span>
     </div>
 
-    <div class="login-gate is-hidden" id="loginGate">
-      <form class="login-card" id="loginGateForm">
-        <h3>Đăng nhập hệ thống</h3>
-        <p class="muted">Đăng nhập để truy cập dashboard. Mặc định: <strong>admin / admin</strong>.</p>
-        <label>Tên đăng nhập
-          <input id="loginGateUsername" autocomplete="username" required />
-        </label>
-        <label>Mật khẩu
-          <input id="loginGatePassword" type="password" autocomplete="current-password" required />
-        </label>
-        <p class="login-error" id="loginGateError"></p>
-        <button type="submit">Đăng nhập</button>
-        <button type="button" class="ghost" id="gateShowReset">Quên mật khẩu?</button>
-      </form>
-
-      <form class="login-card is-hidden" id="gateResetForm">
-        <h3>Đặt lại mật khẩu</h3>
-        <p class="muted">Tạm thời đặt lại không cần xác thực (OTP qua email sẽ bổ sung sau).</p>
-        <label>Tên đăng nhập
-          <input id="gateResetUser" autocomplete="username" required />
-        </label>
-        <label>Mật khẩu mới
-          <input id="gateResetNew" type="password" autocomplete="new-password" required />
-        </label>
-        <p class="login-error" id="gateResetError"></p>
-        <button type="submit">Đặt lại mật khẩu</button>
-        <button type="button" class="ghost" id="gateBackLogin">Quay lại đăng nhập</button>
-      </form>
-    </div>
-
     <div class="modal is-hidden" id="cameraEditModal">
       <div class="modal-card">
         <div class="panel-head inline">

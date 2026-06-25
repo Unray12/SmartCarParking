@@ -15,19 +15,6 @@ from app.modules.sessions.service import compute_duration_minutes, compute_fee
 settings = get_settings()
 
 
-def _session_fee(s: ParkingSession) -> int:
-    """Phí đã chốt nếu có, ngược lại tính lại (cho dữ liệu cũ trước khi lưu fee)."""
-    if s.fee is not None:
-        return s.fee
-    return compute_fee(s.entry_time, s.exit_time)
-
-
-def _session_duration(s: ParkingSession) -> int:
-    if s.duration_minutes is not None:
-        return s.duration_minutes
-    return compute_duration_minutes(s.entry_time, s.exit_time)
-
-
 def dashboard_summary(db: Session) -> DashboardSummaryOut:
     now = datetime.utcnow()
     today_start = datetime(now.year, now.month, now.day)
@@ -51,13 +38,13 @@ def dashboard_summary(db: Session) -> DashboardSummaryOut:
     total_occupied = int(active_sessions)
     occupancy_rate = round((total_occupied / total_capacity) * 100, 1) if total_capacity else 0.0
 
-    # Doanh thu hôm nay: tổng phí đã chốt của các session ra trong ngày (fallback tính lại nếu thiếu).
-    today_done = db.scalars(
-        select(ParkingSession).where(
+    # Doanh thu hôm nay: tổng phí đã chốt — gộp ngay trong DB (không tải toàn bộ row).
+    # Phí được lưu lúc check-out nên SUM(fee) là chính xác cho dữ liệu mới.
+    today_revenue = db.scalar(
+        select(func.coalesce(func.sum(ParkingSession.fee), 0)).where(
             and_(ParkingSession.exit_time.is_not(None), ParkingSession.exit_time >= today_start)
         )
-    ).all()
-    today_revenue = sum(_session_fee(s) for s in today_done)
+    ) or 0
 
     return DashboardSummaryOut(
         cameras_total=int(cameras_total),
@@ -87,9 +74,14 @@ def dashboard_stats(db: Session, days: int = 7) -> StatsOut:
 
     by_hour = [0] * 24
 
-    # Lấy session liên quan tới khoảng thời gian (vào hoặc ra trong khoảng).
-    sessions = db.scalars(
-        select(ParkingSession).where(
+    # Chỉ tải 4 cột cần thiết (không kéo cả snapshot path/plate...) cho nhẹ trên NUC.
+    rows = db.execute(
+        select(
+            ParkingSession.entry_time,
+            ParkingSession.exit_time,
+            ParkingSession.fee,
+            ParkingSession.duration_minutes,
+        ).where(
             (ParkingSession.entry_time >= since) | (ParkingSession.exit_time >= since)
         )
     ).all()
@@ -98,18 +90,18 @@ def dashboard_stats(db: Session, days: int = 7) -> StatsOut:
     total_revenue = 0
     completed_in_range = 0
 
-    for s in sessions:
-        if s.entry_time and s.entry_time >= since:
-            key = s.entry_time.strftime("%Y-%m-%d")
+    for entry_time, exit_time, fee, duration_minutes in rows:
+        if entry_time and entry_time >= since:
+            key = entry_time.strftime("%Y-%m-%d")
             if key in daily_map:
                 daily_map[key]["checkins"] += 1
-            by_hour[s.entry_time.hour] += 1
-        if s.exit_time and s.exit_time >= since:
-            key = s.exit_time.strftime("%Y-%m-%d")
+            by_hour[entry_time.hour] += 1
+        if exit_time and exit_time >= since:
+            key = exit_time.strftime("%Y-%m-%d")
             if key in daily_map:
                 daily_map[key]["checkouts"] += 1
-            durations.append(_session_duration(s))
-            total_revenue += _session_fee(s)
+            durations.append(duration_minutes if duration_minutes is not None else compute_duration_minutes(entry_time, exit_time))
+            total_revenue += fee if fee is not None else compute_fee(entry_time, exit_time)
             completed_in_range += 1
 
     avg_duration = int(round(sum(durations) / len(durations))) if durations else 0

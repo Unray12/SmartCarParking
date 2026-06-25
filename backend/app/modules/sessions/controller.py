@@ -7,10 +7,10 @@ from app.database.session import get_db
 from app.modules.sessions.schema import ParkingSessionOut
 from app.modules.sessions.service import list_sessions
 
-router = APIRouter(tags=["sessions"])
+router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 
-@router.get("/api/sessions", response_model=list[ParkingSessionOut])
+@router.get("", response_model=list[ParkingSessionOut])
 def list_sessions_endpoint(
     active_only: bool = False,
     limit: int = 100,

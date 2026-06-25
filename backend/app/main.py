@@ -134,6 +134,13 @@ def web_index() -> FileResponse:
     return FileResponse(WEB_ROOT / "index.html")
 
 
+@app.get("/login", include_in_schema=False)
+def web_login() -> FileResponse:
+    if not WEB_ROOT.exists():
+        raise HTTPException(status_code=404, detail="Web frontend not found")
+    return FileResponse(WEB_ROOT / "login.html")
+
+
 @app.get("/{full_path:path}", include_in_schema=False)
 def web_assets(full_path: str) -> FileResponse:
     if full_path.startswith(("api/", "docs", "redoc", "openapi.json", "health", "ws/")):

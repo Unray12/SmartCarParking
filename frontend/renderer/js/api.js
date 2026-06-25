@@ -65,10 +65,11 @@ export async function api(path, options = {}) {
     const response = await fetch(url, requestOptions);
 
     // Token hết hạn / không hợp lệ → về trang login (trừ chính các API public của login).
+    // Dùng 'login.html' tương đối để chạy được cả 2 chế độ: FE tĩnh (5173) hoặc BE serve (8010).
     if (response.status === 401 && !isPublicAuthPath(path)) {
       clearToken();
-      if (!window.location.pathname.startsWith('/login')) {
-        window.location.replace('/login');
+      if (!/login\.html$/.test(window.location.pathname)) {
+        window.location.replace('login.html');
       }
     }
 

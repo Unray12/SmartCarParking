@@ -306,7 +306,7 @@ function isAuthenticated() {
 }
 
 function goToLogin() {
-  window.location.replace('/login');
+  window.location.replace('login.html');
 }
 
 function renderAiCameraOptions() {

@@ -35,7 +35,7 @@ function closeReset() {
 
 // Nếu đã có token, vào thẳng app (app tự kiểm tra /me và đẩy lại nếu hết hạn).
 if (getToken()) {
-  window.location.replace('/');
+  window.location.replace('index.html');
 }
 
 loginForm.addEventListener('submit', async (ev) => {
@@ -54,7 +54,7 @@ loginForm.addEventListener('submit', async (ev) => {
       body: JSON.stringify({ username, password })
     });
     setToken(res.access_token, res.username);
-    window.location.replace('/');
+    window.location.replace('index.html');
   } catch (err) {
     el('loginError').textContent = friendlyError(err?.message);
   } finally {

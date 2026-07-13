@@ -1,0 +1,13 @@
+**/.venv/
+**/__pycache__/
+*.pyc
+backend/snapshots_store/
+backend/models_store/
+data/
+.git/
+.gitignore
+*.md
+.env
+.env.*
+!.env.example
+frontend/node_modules/

@@ -10,6 +10,9 @@ __pycache__/
 snapshots_store/
 backend/snapshots_store/
 
+# Docker bind-mount data (Postgres, snapshots, models, logs) - dữ liệu persist ngoài host
+data/
+
 # Sensitive config / secrets
 CONTEXT.md
 .env

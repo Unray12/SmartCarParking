@@ -1,8 +1,6 @@
 **/.venv/
 **/__pycache__/
 *.pyc
-backend/snapshots_store/
-backend/models_store/
 backend/data/
 .git/
 .gitignore
@@ -10,4 +8,10 @@ backend/data/
 .env
 .env.*
 !.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
 frontend/node_modules/

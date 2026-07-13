@@ -26,22 +26,22 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    # Nạp TOÀN BỘ biến trong .env (root) thẳng vào container lúc chạy - không
+    # build/bake vào image, không đụng backend/.env. Đây là nguồn config DUY NHẤT
+    # cho app khi chạy qua Docker (xem backend/app/core/config.py để đối chiếu tên biến).
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-admin}@localhost:5432/${POSTGRES_DB:-smartparking}
-      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
-      JWT_SECRET: ${JWT_SECRET:-CHANGE_ME_long_random_string}
-      CORS_ORIGINS: ${CORS_ORIGINS:-*}
-      RFID_USB_ENABLED: ${RFID_USB_ENABLED:-false}
-      RFID_USB_PORT: ${RFID_USB_PORT:-/dev/ttyUSB0}
+      # DATABASE_URL phải ghép ở đây (không đặt thẳng trong .env) vì cần đúng
+      # hostname "db" theo network của Compose, khác với backend/.env dùng "localhost".
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-admin}@db:5432/${POSTGRES_DB:-smartparking}
       # LOG_DIR đã set sẵn trong Dockerfile, trỏ đúng vào volume log bên dưới.
     volumes:
-      # Ảnh chụp lúc vào/ra - mount thẳng vào đúng thư mục "snapshots_store" mà
-      # app dùng theo default (giống hệt tên khi chạy không-Docker). Đường dẫn/
-      # metadata của ảnh vẫn nằm trong bảng parking_sessions ở Postgres.
-      - ${SNAPSHOTS_DIR:-./backend/snapshots_store}:/app/backend/snapshots_store
-      # Model AI người dùng upload qua "AI Center" - cùng tên "models_store" như default của app.
-      - ${MODELS_DIR:-./backend/models_store}:/app/backend/models_store
+      # Toàn bộ data persist gom vào backend/data/ trên host. Container path khớp
+      # với AI_MODELS_DIR/SNAPSHOT_STORE_DIR trong .env (data/snapshots_store,
+      # data/models_store, tương đối theo backend root = /app/backend).
+      - ${SNAPSHOTS_DIR:-./backend/data/snapshots_store}:/app/backend/data/snapshots_store
+      - ${MODELS_DIR:-./backend/data/models_store}:/app/backend/data/models_store
       # Log của backend (stdout được tee ra file trong này).
       - ${LOGS_DIR:-./backend/data/logs}:/data/logs
     ports:

@@ -9,7 +9,9 @@ services:
     volumes:
       # Data thật của Postgres nằm ở thư mục host này -> build/rebuild container
       # mới vẫn giữ nguyên toàn bộ DB.
-      - ${POSTGRES_DATA_DIR:-./data/postgres}:/var/lib/postgresql/data
+      - ${POSTGRES_DATA_DIR:-./backend/data/postgres}:/var/lib/postgresql/data
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-admin} -d ${POSTGRES_DB:-smartparking}"]
       interval: 5s
@@ -25,23 +27,23 @@ services:
       db:
         condition: service_healthy
     environment:
-      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-admin}@db:5432/${POSTGRES_DB:-smartparking}
+      DATABASE_URL: postgresql+psycopg2://${POSTGRES_USER:-admin}:${POSTGRES_PASSWORD:-admin}@localhost:5432/${POSTGRES_DB:-smartparking}
       ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
       JWT_SECRET: ${JWT_SECRET:-CHANGE_ME_long_random_string}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       RFID_USB_ENABLED: ${RFID_USB_ENABLED:-false}
       RFID_USB_PORT: ${RFID_USB_PORT:-/dev/ttyUSB0}
-      # SNAPSHOT_STORE_DIR / AI_MODELS_DIR / LOG_DIR đã set sẵn trong Dockerfile,
-      # trỏ đúng vào các volume mount bên dưới -> không cần khai lại ở đây.
+      # LOG_DIR đã set sẵn trong Dockerfile, trỏ đúng vào volume log bên dưới.
     volumes:
-      # Ảnh chụp lúc vào/ra (chỉ ảnh thật; đường dẫn/metadata của ảnh vẫn nằm
-      # trong bảng parking_sessions ở Postgres, không nhân đôi dữ liệu).
-      - ${SNAPSHOTS_DIR:-./data/snapshots}:/data/snapshots
-      # Model AI người dùng upload qua "AI Center".
-      - ${MODELS_DIR:-./data/models}:/data/models
+      # Ảnh chụp lúc vào/ra - mount thẳng vào đúng thư mục "snapshots_store" mà
+      # app dùng theo default (giống hệt tên khi chạy không-Docker). Đường dẫn/
+      # metadata của ảnh vẫn nằm trong bảng parking_sessions ở Postgres.
+      - ${SNAPSHOTS_DIR:-./backend/snapshots_store}:/app/backend/snapshots_store
+      # Model AI người dùng upload qua "AI Center" - cùng tên "models_store" như default của app.
+      - ${MODELS_DIR:-./backend/models_store}:/app/backend/models_store
       # Log của backend (stdout được tee ra file trong này).
-      - ${LOGS_DIR:-./data/logs}:/data/logs
+      - ${LOGS_DIR:-./backend/data/logs}:/data/logs
     ports:
       - "${BACKEND_PORT:-8010}:8010"
     # Passthrough đầu đọc RFID USB - CHỈ hoạt động trên Linux host có thiết bị thật.

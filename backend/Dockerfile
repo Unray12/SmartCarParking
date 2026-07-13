@@ -14,12 +14,11 @@ COPY frontend/ frontend/
 
 WORKDIR /app/backend
 
-# Ghi đè bằng biến môi trường/volume khi chạy container; đường dẫn tuyệt đối
-# ở đây khiến app bỏ qua backend_root và dùng thẳng các thư mục này.
-ENV SNAPSHOT_STORE_DIR=/data/snapshots \
-    AI_MODELS_DIR=/data/models \
-    LOG_DIR=/data/logs
+# SNAPSHOT_STORE_DIR / AI_MODELS_DIR không set ở đây -> dùng đúng default của app
+# ("snapshots_store" / "models_store", tương đối theo backend root) để tên thư mục
+# giống hệt lúc chạy không-Docker; volume ngoài mount thẳng vào 2 thư mục đó.
+ENV LOG_DIR=/data/logs
 
 EXPOSE 8010
 
-CMD ["sh", "-c", "mkdir -p \"$SNAPSHOT_STORE_DIR\" \"$AI_MODELS_DIR\" \"$LOG_DIR\" && exec uvicorn app.main:app --host 0.0.0.0 --port 8010 2>&1 | tee -a \"$LOG_DIR/backend.log\""]
+CMD ["sh", "-c", "mkdir -p \"$LOG_DIR\" && exec uvicorn app.main:app --host 0.0.0.0 --port 8010 2>&1 | tee -a \"$LOG_DIR/backend.log\""]

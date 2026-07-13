@@ -9,9 +9,11 @@ __pycache__/
 
 snapshots_store/
 backend/snapshots_store/
+models_store/
+backend/models_store/
 
-# Docker bind-mount data (Postgres, snapshots, models, logs) - dữ liệu persist ngoài host
-data/
+# Docker bind-mount data (Postgres, logs) - dữ liệu persist ngoài host
+backend/data/
 
 # Sensitive config / secrets
 CONTEXT.md

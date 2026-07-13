@@ -3,7 +3,7 @@
 *.pyc
 backend/snapshots_store/
 backend/models_store/
-data/
+backend/data/
 .git/
 .gitignore
 *.md

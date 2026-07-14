@@ -91,12 +91,19 @@ class CameraWorker:
         settings = get_settings()
         source = self.source_url
         if source.startswith('rtsp://'):
+            # rtsp_transport là AVOption của FFmpeg, KHÔNG phải query string của URL -
+            # gắn "?rtsp_transport=tcp" vào URL (cách cũ) bị FFmpeg's RTSP demuxer bỏ
+            # qua hoàn toàn, nên transport thực tế luôn rơi về UDP mặc định (dù đặt
+            # STREAM_RTSP_TRANSPORT=tcp). Phải đi qua OPENCV_FFMPEG_CAPTURE_OPTIONS.
+            # UDP qua NAT của Docker Desktop (WSL2/Hyper-V) trên Windows bị timeout sau
+            # ~30s (conntrack UDP) -> luồng đứng hình, chỉ TCP mới ổn định trong container.
             transport = settings.stream_rtsp_transport.strip().lower() or "tcp"
-            source = source + f'?rtsp_transport={transport}' if '?' not in source else source.replace('?', f'?rtsp_transport={transport}&')
             ffmpeg_opts = (settings.stream_ffmpeg_capture_options or "").strip()
+            combined_opts = f"rtsp_transport;{transport}"
             if ffmpeg_opts:
-                # OpenCV/FFmpeg backend reads this env var when opening VideoCapture.
-                os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = ffmpeg_opts
+                combined_opts = f"{combined_opts}|{ffmpeg_opts}"
+            # OpenCV/FFmpeg backend reads this env var when opening VideoCapture.
+            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = combined_opts
         cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
         # Buffer 1 frame only: always read the freshest frame → minimal latency.
         cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)

@@ -1,0 +1,10 @@
+<xml xmlns="https://developers.google.com/blockly/xml" id="toolbox" style="display: none">
+  <category name="RFID I2C" colour="#00aeae" icon="key">
+    <block type="configure_i2c2"></block>
+    <block type="scan_card"></block>
+    <block type="scan_and_check"></block>
+    <block type="scan_and_add_card"></block>
+    <block type="scan_and_remove_card"></block>
+    <block type="clear_list"></block>
+  </category>
+</xml>

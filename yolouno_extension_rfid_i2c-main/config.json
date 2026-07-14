@@ -1,0 +1,17 @@
+{
+    "name": "RFID I2C",
+    "description": "Mục mở rộng YoloUNO cho module RFID 13.56MHz I2C",
+    "libs": [
+        "rfid.py",
+        "rfid_expansion.py"
+    ],
+    "blocks": [
+        "definition.js"
+    ],
+    "toolbox": "toolbox.xml",
+    "languages": {
+        "en": "languages/en.js",
+        "vi": "languages/vi.js"
+    },
+    "poster": "poster.png"
+}

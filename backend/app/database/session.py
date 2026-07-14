@@ -53,6 +53,7 @@ def _ensure_runtime_schema() -> None:
             ("exit_snapshot_path", "VARCHAR(512)"),
             ("fee", "INTEGER"),
             ("duration_minutes", "INTEGER"),
+            ("ai_plate_match", "BOOLEAN"),
         ]
         with engine.begin() as conn:
             for name, sql_type in additions:
@@ -65,6 +66,9 @@ def _ensure_runtime_schema() -> None:
         if "capacity" not in lot_cols:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE parking_lots ADD COLUMN capacity INTEGER DEFAULT 50 NOT NULL"))
+        if "ai_enabled" not in lot_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE parking_lots ADD COLUMN ai_enabled BOOLEAN DEFAULT FALSE NOT NULL"))
 
     # Index occupancy (idempotent). Postgres/SQLite đều hỗ trợ IF NOT EXISTS.
     if "parking_sessions" in tables:

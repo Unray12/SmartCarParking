@@ -132,10 +132,15 @@ export function initRfid(opts = {}) {
       const feeText = (result.fee != null)
         ? ` · Phí: ${fmtMoney(result.fee, result.currency || '')}${result.duration_minutes != null ? ' (' + fmtDuration(result.duration_minutes) + ')' : ''}`
         : '';
+      const aiText = result.ai_plate_match === true
+        ? ' · AI: khớp biển số'
+        : result.ai_plate_match === false
+          ? ' · AI: KHÔNG khớp biển số (xem lại)'
+          : '';
       showScanTick(`RFID ${result.status} thành công`);
       const capText = result.snapshot_path ? ' và đã capture ảnh' : '';
-      const noticeType = result.status === 'plate_mismatch' ? 'warn' : 'success';
-      notify(`RFID ${result.status}${capText}${feeText}`, noticeType);
+      const noticeType = (result.status === 'plate_mismatch' || result.ai_plate_match === false) ? 'warn' : 'success';
+      notify(`RFID ${result.status}${capText}${feeText}${aiText}`, noticeType);
 
       els.rfidPlate.value = '';
       if (hooks.onEvent) await hooks.onEvent();

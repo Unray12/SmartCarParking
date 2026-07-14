@@ -229,6 +229,10 @@
                   <input id="lotIsActive" type="checkbox" checked />
                   Kích hoạt bãi xe
                 </label>
+                <label class="inline-checkbox">
+                  <input id="lotAiEnabled" type="checkbox" />
+                  Bật AI nhận diện biển số (tự điền biển số lúc vào, so khớp lúc ra)
+                </label>
                 <div class="compact-actions">
                   <button id="lotSubmitBtn" type="submit">Lưu bãi xe</button>
                   <button class="ghost" id="lotCancelEditBtn" type="button">Hủy sửa</button>
@@ -261,7 +265,7 @@
               <table>
                 <thead>
                   <tr>
-                    <th>ID</th><th>Tên bãi</th><th>Sức chứa</th><th>Lấp đầy</th><th>Cam vào</th><th>Cam ra</th><th>Trạng thái</th><th>Quản lý</th><th>Sửa</th><th>Xóa</th>
+                    <th>ID</th><th>Tên bãi</th><th>Sức chứa</th><th>Lấp đầy</th><th>Cam vào</th><th>Cam ra</th><th>Trạng thái</th><th>AI</th><th>Quản lý</th><th>Sửa</th><th>Xóa</th>
                   </tr>
                 </thead>
                 <tbody id="lotBody"></tbody>
@@ -272,7 +276,13 @@
           <article class="panel">
             <div class="panel-head inline">
               <h3 id="lotDetailTitle">Chi tiết bãi xe</h3>
-              <button class="ghost" id="lotDetailCloseBtn" type="button">Đóng</button>
+              <div class="compact-actions">
+                <label class="inline-checkbox">
+                  <input id="lotDetailAiToggle" type="checkbox" disabled />
+                  Bật AI cho bãi này
+                </label>
+                <button class="ghost" id="lotDetailCloseBtn" type="button">Đóng</button>
+              </div>
             </div>
             <div class="panel-content">
               <p class="muted" id="lotDetailMeta">Chọn bãi xe từ danh sách để xem dữ liệu riêng.</p>
@@ -319,7 +329,7 @@
             <div class="table-wrap tall panel-content lot-detail-log-wrap">
               <table>
                 <thead>
-                  <tr><th>Thời gian</th><th>Hướng</th><th>Biển số</th><th>RFID</th><th>Trạng thái</th></tr>
+                  <tr><th>Thời gian</th><th>Hướng</th><th>Biển số</th><th>RFID</th><th>Trạng thái</th><th>AI</th></tr>
                 </thead>
                 <tbody id="lotDetailLogBody"></tbody>
               </table>

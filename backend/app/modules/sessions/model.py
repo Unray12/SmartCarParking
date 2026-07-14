@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Index, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base, utcnow
@@ -28,3 +28,7 @@ class ParkingSession(Base):
     fee: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Số phút gửi chốt khi xe ra (snapshot tại thời điểm check-out).
     duration_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Kết quả so khớp biển số AI lúc check-out với biển số lúc vào: None = chưa
+    # kiểm tra (bãi không bật AI, hoặc AI không đọc được biển lúc ra), True/False = có kiểm tra.
+    # KHÔNG chặn check-out dù mismatch - chỉ đánh dấu để xem lại (theo yêu cầu người dùng).
+    ai_plate_match: Mapped[bool | None] = mapped_column(Boolean, nullable=True)

@@ -25,6 +25,9 @@ class RfidEventResult(BaseModel):
     lot_id: int | None = None
     snapshot_path: str | None = None
     mismatch: bool = False
+    # Kết quả so khớp biển số AI lúc check-out (None = bãi không bật AI hoặc AI
+    # không đọc được biển lúc ra). KHÔNG chặn checkout dù False - chỉ để cảnh báo.
+    ai_plate_match: bool | None = None
     # Phí gửi xe khi check-out
     fee: int | None = None
     currency: str | None = None

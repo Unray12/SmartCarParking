@@ -61,6 +61,7 @@ def create_parking_lot(db: Session, payload: ParkingLotCreate) -> ParkingLot:
         entry_camera_id=payload.entry_camera_id,
         exit_camera_id=payload.exit_camera_id,
         is_active=payload.is_active,
+        ai_enabled=payload.ai_enabled,
     )
     db.add(lot)
     db.commit()
@@ -88,6 +89,8 @@ def update_parking_lot(db: Session, lot_id: int, payload: ParkingLotUpdate) -> P
     lot.exit_camera_id = payload.exit_camera_id
     if payload.is_active is not None:
         lot.is_active = payload.is_active
+    if payload.ai_enabled is not None:
+        lot.ai_enabled = payload.ai_enabled
 
     db.add(lot)
     db.commit()
@@ -191,6 +194,7 @@ def get_parking_lot_overview(db: Session, lot_id: int, limit: int = 100) -> Park
             exit_camera_id=s.exit_camera_id,
             entry_snapshot_path=s.entry_snapshot_path,
             exit_snapshot_path=s.exit_snapshot_path,
+            ai_plate_match=s.ai_plate_match,
         )
         for s in sessions
     ]

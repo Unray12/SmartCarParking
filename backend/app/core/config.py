@@ -44,6 +44,14 @@ class Settings(BaseSettings):
     ai_models_dir: str = "models_store"
     snapshot_store_dir: str = "snapshots_store"
 
+    # ANPR (YOLOv5 ONNX 2 giai đoạn - detect biển + detect từng ký tự). Chỉ dùng khi
+    # bãi xe có ai_enabled=True (xem parking_lots) - còn lại app không tự chạy AI.
+    plate_detector_model: str = "LP_detector.onnx"
+    plate_ocr_model: str = "LP_ocr.onnx"
+    plate_detector_imgsz: int = 640
+    plate_detector_conf: float = 0.5
+    plate_ocr_conf: float = 0.6
+
     # RFID USB Serial
     rfid_usb_port: str = "/dev/ttyUSB0"
     rfid_usb_baudrate: int = 115200

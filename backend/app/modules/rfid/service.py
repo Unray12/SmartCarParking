@@ -68,6 +68,26 @@ def _persist_event(db: Session, payload: RfidEventIn, occurred_at: datetime) -> 
     db.add(event)
 
 
+def _detect_plate_via_ai(
+    camera_manager: "CameraStreamManager | None",
+    camera_id: int | None,
+) -> tuple[str | None, float | None]:
+    """Chạy AI nhận diện NGAY lúc quét RFID (on-demand qua test_camera_ai - dùng frame
+    mới nhất camera đang có, không phụ thuộc/không cần bật stream inference nền).
+    Chỉ gọi khi bãi có ai_enabled=True. Không raise - lỗi/không đọc được thì trả (None, None)."""
+    if camera_manager is None or not camera_id:
+        return None, None
+    try:
+        frame_available, detections = camera_manager.test_camera_ai(camera_id)
+    except Exception:
+        return None, None
+    if not frame_available or not detections:
+        return None, None
+    best = max(detections, key=lambda d: d.confidence or 0.0)
+    plate = normalize_plate(best.plate)
+    return (plate or None), best.confidence
+
+
 def _resolve_lot(db: Session, lot_id: int | None) -> ParkingLot | None:
     if lot_id is not None:
         return db.get(ParkingLot, lot_id)
@@ -153,6 +173,15 @@ def _handle_check_in(
 
     normalized_plate = normalize_plate(payload.plate) if payload.plate else ""
     chosen_plate_read: PlateRead | None = None
+    entry_camera_id = lot.entry_camera_id if lot and lot.entry_camera_id else None
+
+    # Bãi bật AI + chưa có biển số tường minh -> detect ngay lúc quét (ưu tiên hơn
+    # plate_reads nền vì đây là kết quả tươi đúng thời điểm quẹt thẻ). Bãi tắt AI thì
+    # bỏ qua hoàn toàn bước này - giữ đúng hành vi cũ (biển số optional, không tự detect).
+    if not normalized_plate and lot and lot.ai_enabled:
+        ai_plate, _ai_conf = _detect_plate_via_ai(camera_manager, entry_camera_id)
+        if ai_plate:
+            normalized_plate = ai_plate
 
     if not normalized_plate:
         chosen_plate_read = _latest_unlinked_plate(db, occurred_at)
@@ -162,7 +191,8 @@ def _handle_check_in(
     if not normalized_plate:
         normalized_plate = NO_PLATE_SENTINEL
 
-    entry_camera_id = lot.entry_camera_id if lot and lot.entry_camera_id else (chosen_plate_read.camera_id if chosen_plate_read else None)
+    if not entry_camera_id and chosen_plate_read:
+        entry_camera_id = chosen_plate_read.camera_id
     entry_snapshot_path = _capture_snapshot(
         db=db,
         camera_manager=camera_manager,
@@ -234,6 +264,17 @@ def _handle_check_out(
             )
 
     exit_camera_id = lot.exit_camera_id if lot and lot.exit_camera_id else None
+
+    # Bãi bật AI -> detect lại biển số ở camera cổng RA ngay lúc quét, so với biển đã
+    # lưu lúc vào. CHỦ Ý: không chặn check-out dù lệch (chỉ đánh dấu ai_plate_match=False
+    # để xem lại sau) - tránh kẹt xe khi AI đọc nhầm (biển bẩn/góc camera xấu/xe che biển).
+    # None = không đánh giá được (bãi tắt AI, hoặc AI không đọc được biển lúc ra).
+    ai_plate_match: bool | None = None
+    if lot and lot.ai_enabled and active_session.plate != NO_PLATE_SENTINEL:
+        ai_plate, _ai_conf = _detect_plate_via_ai(camera_manager, exit_camera_id)
+        if ai_plate:
+            ai_plate_match = ai_plate == active_session.plate
+
     exit_snapshot_path = _capture_snapshot(
         db=db,
         camera_manager=camera_manager,
@@ -254,6 +295,7 @@ def _handle_check_out(
     active_session.status = "out"
     active_session.duration_minutes = duration
     active_session.fee = fee
+    active_session.ai_plate_match = ai_plate_match
     if exit_camera_id:
         active_session.exit_camera_id = exit_camera_id
     if exit_snapshot_path:
@@ -261,6 +303,8 @@ def _handle_check_out(
     db.add(active_session)
     db.commit()
 
+    if ai_plate_match is False:
+        print(f"[RFID EVENT] AI plate MISMATCH luc check-out: card={payload.card_id}, session_plate={active_session.plate}")
     print(f"[RFID EVENT] Car OUT: card={payload.card_id}, plate={active_session.plate}, fee={fee} ({duration}m)")
 
     return RfidEventResult(
@@ -274,6 +318,7 @@ def _handle_check_out(
         fee=fee,
         currency=settings.parking_currency,
         duration_minutes=duration,
+        ai_plate_match=ai_plate_match,
     )
 
 

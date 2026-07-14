@@ -11,6 +11,7 @@ class ParkingLotCreate(BaseModel):
     entry_camera_id: int | None = None
     exit_camera_id: int | None = None
     is_active: bool = True
+    ai_enabled: bool = False
 
 
 class ParkingLotUpdate(BaseModel):
@@ -19,6 +20,7 @@ class ParkingLotUpdate(BaseModel):
     entry_camera_id: int | None = None
     exit_camera_id: int | None = None
     is_active: bool | None = None
+    ai_enabled: bool | None = None
 
 
 class ParkingLotOut(BaseModel):
@@ -30,6 +32,7 @@ class ParkingLotOut(BaseModel):
     entry_camera_id: int | None
     exit_camera_id: int | None
     is_active: bool
+    ai_enabled: bool = False
     created_at: datetime
     updated_at: datetime
     # Computed occupancy (None khi không tính, ví dụ ở create/update response).
@@ -61,6 +64,7 @@ class ParkingSessionBriefOut(BaseModel):
     exit_camera_id: int | None
     entry_snapshot_path: str | None
     exit_snapshot_path: str | None
+    ai_plate_match: bool | None = None
 
 
 class ParkingLotOverviewOut(BaseModel):

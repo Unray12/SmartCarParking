@@ -51,6 +51,7 @@ def _to_out(s: ParkingSession) -> ParkingSessionOut:
         exit_camera_id=s.exit_camera_id,
         entry_snapshot_path=s.entry_snapshot_path,
         exit_snapshot_path=s.exit_snapshot_path,
+        ai_plate_match=s.ai_plate_match,
         duration_minutes=duration,
         fee=fee,
         currency=settings.parking_currency,

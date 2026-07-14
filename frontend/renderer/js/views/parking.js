@@ -6,6 +6,7 @@ import { notify, fmtDate, absoluteApiUrl, absoluteApiUrlNoCache, cameraNameById,
 
 const lotDetailState = {
   selectedLotId: null,
+  currentLot: null,
   entryWs: null,
   exitWs: null,
   sharedWs: null,
@@ -30,6 +31,7 @@ export function resetLotForm() {
   els.lotSubmitBtn.textContent = 'Lưu bãi xe';
   els.lotForm.reset();
   els.lotIsActive.checked = true;
+  els.lotAiEnabled.checked = false;
   if (els.lotCapacity) els.lotCapacity.value = '50';
 }
 
@@ -42,6 +44,7 @@ function fillLotFormForEdit(lot) {
   els.lotEntryCamera.value = lot.entry_camera_id ? String(lot.entry_camera_id) : '';
   els.lotExitCamera.value = lot.exit_camera_id ? String(lot.exit_camera_id) : '';
   els.lotIsActive.checked = Boolean(lot.is_active);
+  els.lotAiEnabled.checked = Boolean(lot.ai_enabled);
 }
 
 // Đổ option camera cho select cổng vào/ra (gọi khi danh sách camera đổi).
@@ -94,7 +97,7 @@ function renderLotFilterOptions(lots) {
 function renderParkingLots(lots) {
   els.lotBody.innerHTML = '';
   if (!lots.length) {
-    els.lotBody.innerHTML = '<tr><td colspan="10" class="empty">Chưa có bãi xe</td></tr>';
+    els.lotBody.innerHTML = '<tr><td colspan="11" class="empty">Chưa có bãi xe</td></tr>';
     return;
   }
 
@@ -114,6 +117,7 @@ function renderParkingLots(lots) {
       <td>${cameraNameById(lot.entry_camera_id)}</td>
       <td>${cameraNameById(lot.exit_camera_id)}</td>
       <td>${lot.is_active ? '<span class="chip chip-in">Active</span>' : '<span class="chip chip-out">Inactive</span>'}</td>
+      <td>${lot.ai_enabled ? '<span class="chip chip-in">Bật</span>' : '<span class="chip chip-out">Tắt</span>'}</td>
       <td><button class="ghost lot-manage-btn" data-lot-id="${lot.id}">Quản lý</button></td>
       <td><button class="ghost lot-edit-btn" data-lot-id="${lot.id}">Sửa</button></td>
       <td><button class="ghost lot-delete-btn" data-lot-id="${lot.id}">Xóa</button></td>
@@ -347,15 +351,15 @@ function renderLotDetailLogs(sessions) {
   els.lotDetailLogBody.innerHTML = '';
   const rows = [];
   for (const s of sessions) {
-    rows.push({ at: s.entry_time, direction: 'in', plate: s.plate || '-', card: s.rfid_card, status: 'checked_in' });
+    rows.push({ at: s.entry_time, direction: 'in', plate: s.plate || '-', card: s.rfid_card, status: 'checked_in', aiMatch: null });
     if (s.exit_time) {
-      rows.push({ at: s.exit_time, direction: 'out', plate: s.plate || '-', card: s.rfid_card, status: 'checked_out' });
+      rows.push({ at: s.exit_time, direction: 'out', plate: s.plate || '-', card: s.rfid_card, status: 'checked_out', aiMatch: s.ai_plate_match ?? null });
     }
   }
   rows.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
 
   if (!rows.length) {
-    els.lotDetailLogBody.innerHTML = '<tr><td colspan="5" class="empty">Chưa có log in/out cho bãi này</td></tr>';
+    els.lotDetailLogBody.innerHTML = '<tr><td colspan="6" class="empty">Chưa có log in/out cho bãi này</td></tr>';
     return;
   }
 
@@ -364,6 +368,7 @@ function renderLotDetailLogs(sessions) {
     const tr = document.createElement('tr');
     const directionLabel = row.direction === 'in' ? 'IN' : 'OUT';
     const statusLabel = row.status === 'checked_in' ? 'Đang gửi' : 'Đã ra';
+    const aiLabel = row.aiMatch === null ? '-' : (row.aiMatch ? '<span class="lot-log-chip lot-log-chip-in">Khớp</span>' : '<span class="lot-log-chip lot-log-chip-out">Không khớp</span>');
     tr.className = `lot-log-row ${idx % 2 === 0 ? 'lot-log-even' : 'lot-log-odd'}`;
     tr.innerHTML = `
       <td>${fmtDate(row.at)}</td>
@@ -371,6 +376,7 @@ function renderLotDetailLogs(sessions) {
       <td>${row.plate}</td>
       <td>${row.card}</td>
       <td><span class="lot-log-chip ${row.status === 'checked_in' ? 'lot-log-chip-in' : 'lot-log-chip-out'}">${statusLabel}</span></td>
+      <td>${aiLabel}</td>
     `;
     els.lotDetailLogBody.appendChild(tr);
   }
@@ -448,8 +454,11 @@ function renderLotLatestCaptures(snapshots) {
 export async function openParkingLotDetail(lotId) {
   const data = await api(`/api/v1/parking-lots/${lotId}/overview?limit=100`);
   lotDetailState.selectedLotId = lotId;
+  lotDetailState.currentLot = data.lot;
   els.lotDetailTitle.textContent = `Chi tiết bãi xe: ${data.lot.name} (#${data.lot.id})`;
   els.lotDetailMeta.textContent = `Cam vào: ${cameraNameById(data.lot.entry_camera_id)} | Cam ra: ${cameraNameById(data.lot.exit_camera_id)}`;
+  els.lotDetailAiToggle.disabled = false;
+  els.lotDetailAiToggle.checked = Boolean(data.lot.ai_enabled);
   renderLotDetailLogs(data.sessions || []);
   renderLotLatestCaptures(data.snapshots || []);
   ensureLotStreams(data.lot);
@@ -502,6 +511,7 @@ export function initParking(opts = {}) {
           entry_camera_id: els.lotEntryCamera.value ? Number(els.lotEntryCamera.value) : null,
           exit_camera_id: els.lotExitCamera.value ? Number(els.lotExitCamera.value) : null,
           is_active: Boolean(els.lotIsActive.checked),
+          ai_enabled: Boolean(els.lotAiEnabled.checked),
         }),
       });
       notify(editId ? 'Cập nhật bãi xe thành công' : 'Tạo bãi xe thành công', 'success');
@@ -518,15 +528,43 @@ export function initParking(opts = {}) {
 
   els.lotDetailCloseBtn.addEventListener('click', () => {
     lotDetailState.selectedLotId = null;
+    lotDetailState.currentLot = null;
     closeLotDetailStreams();
     els.lotDetailTitle.textContent = 'Chi tiết bãi xe';
     els.lotDetailMeta.textContent = 'Chọn bãi xe từ danh sách để xem dữ liệu riêng.';
-    els.lotDetailLogBody.innerHTML = '<tr><td colspan="5" class="empty">Chưa có dữ liệu</td></tr>';
+    els.lotDetailAiToggle.checked = false;
+    els.lotDetailAiToggle.disabled = true;
+    els.lotDetailLogBody.innerHTML = '<tr><td colspan="6" class="empty">Chưa có dữ liệu</td></tr>';
     els.lotEntryCaptureImg.src = '';
     els.lotExitCaptureImg.src = '';
     setCaptureStatusIdle();
     setLotPlaceholder('entry', 'Chưa có camera vào');
     setLotPlaceholder('exit', 'Chưa có camera ra');
+  });
+
+  els.lotDetailAiToggle.addEventListener('change', async () => {
+    const lot = lotDetailState.currentLot;
+    if (!lot) return;
+    const nextEnabled = els.lotDetailAiToggle.checked;
+    try {
+      await api(`/api/v1/parking-lots/${lot.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          name: lot.name,
+          capacity: lot.capacity,
+          entry_camera_id: lot.entry_camera_id,
+          exit_camera_id: lot.exit_camera_id,
+          is_active: lot.is_active,
+          ai_enabled: nextEnabled,
+        }),
+      });
+      lotDetailState.currentLot = { ...lot, ai_enabled: nextEnabled };
+      notify(nextEnabled ? 'Đã bật AI nhận diện cho bãi này' : 'Đã tắt AI nhận diện cho bãi này', 'success');
+      await loadParkingLots();
+    } catch (err) {
+      els.lotDetailAiToggle.checked = !nextEnabled;
+      notify(`Đổi trạng thái AI lỗi: ${err.message}`, 'error');
+    }
   });
 
   els.snapshotLotFilter.addEventListener('change', () => {

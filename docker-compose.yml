@@ -47,9 +47,12 @@ services:
     ports:
       - "${BACKEND_PORT:-8010}:8010"
     # Passthrough đầu đọc RFID USB - CHỈ hoạt động trên Linux host có thiết bị thật.
-    # Bỏ comment và sửa đúng path khi deploy lên máy có gắn RFID USB.
+    # Bỏ comment khi chạy qua Docker (nếu chạy bare-metal/uvicorn trực tiếp thì
+    # không cần, container không liên quan). Kiểm tra đúng path thật bằng
+    # `ls /dev/tty*` trên host trước khi bật - board USB native (YoloUNO/ESP32-S3)
+    # thường là /dev/ttyACM0, board qua chip cầu USB-serial thường là /dev/ttyUSB0.
     # devices:
-    #   - "/dev/ttyUSB0:/dev/ttyUSB0"
+    #   - "/dev/ttyACM0:/dev/ttyACM0"
 
   frontend:
     build:

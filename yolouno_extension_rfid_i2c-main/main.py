@@ -1,127 +1,83 @@
-from motor import *
-from mdv2 import *
-from drivebase import *
-from servo import *
-from mpu6050 import MPU6050
-from angle_sensor import AngleSensor
-from ble import *
-from gamepad import *
-from abutton import *
-from pins import *
+"""
+Main cho YoloUNO (ESP32, OhStem/AIoT VN) - 1 board gan 2 cam bien RFID I2C
+13.56MHz (1 cong VAO + 1 cong RA), doc lien tuc va gui su kien qua Serial
+(USB) dung dinh dang backend dang parse (xem
+backend/app/services/rfid_usb_reader.py, RFID_PATTERN):
 
-async def on_cmd_BTN_L1():
-  await servo1.run_angle(angle=180, speed=100)
+    {in: <card_id>}   hoac   {out: <card_id>}
 
-async def on_cmd_BTN_L2():
-  await servo1.run_angle(angle=0, speed=100)
+Vi du thuc te: {in: 8E:68:B9:06}
 
-async def on_cmd_BTN_R1():
-  await servo2.run_angle(angle=100, speed=100)
+2 cam bien dung 2 bus I2C rieng cua extension nay (xem readme.md):
+  - Cam bien CONG VAO -> I2C1 (bus mac dinh cua board, tu nhan chan, khong
+    can khai bao - da co san qua bien `rfid`).
+  - Cam bien CONG RA  -> I2C2 (bus mo rong, PHAI khai bao chan SCL/SDA qua
+    configure_i2c2() truoc khi dung - xem EXIT_SCL_PIN/EXIT_SDA_PIN ben duoi).
 
-async def on_cmd_BTN_R2():
-  await servo2.run_angle(angle=(-20), speed=100)
+QUAN TRONG: doi EXIT_SCL_PIN / EXIT_SDA_PIN cho dung voi chan ban da noi day
+thuc te cho cam bien cong ra tren board.
 
-async def on_cmd_BTN_THUMBR():
-  motor5.run(0)
+Khong dung ky tu tieng Viet co dau trong cac print() ben duoi - de tranh loi
+encode khi xem qua serial monitor tren Windows (da gap bug tuong tu ben
+backend, xem CONTEXT.md).
+"""
 
-# các câu lệnh chạy tự động sẽ đặt trong này
-async def ch_E1_BA_A1y_t_E1_BB_B1__C4_91_E1_BB_99ng():
-  robot.speed(50, min_speed=40)
-  await robot.forward_for(50, unit=CM, then=BRAKE)
-  await asleep_ms(1000)
-  await robot.backward_for(50, unit=CM, then=BRAKE)
-  await asleep_ms(1000)
-  await robot.turn_left_for(90, unit=DEGREE, then=BRAKE)
-  await asleep_ms(1000)
-  await robot.turn_right_for(90, unit=DEGREE, then=BRAKE)
-  await asleep_ms(1000)
-  robot.speed(60, min_speed=40)
+from rfid import *
+from time import sleep_ms
 
-async def on_abutton_BOOT_pressed():
-  robot.mode_auto = True
-  await ch_E1_BA_A1y_t_E1_BB_B1__C4_91_E1_BB_99ng()
-  robot.mode_auto = False
+# Chan cho cam bien CONG RA (I2C2 - bus mo rong). Cam bien CONG VAO dung I2C1
+# (bus mac dinh) nen khong can khai bao chan o day.
+EXIT_SCL_PIN = "D3"
+EXIT_SDA_PIN = "D4"
 
-md_v2 = MotorDriverV2()
-motor1 = DCMotor(md_v2, M1, reversed=True)
-motor2 = DCMotor(md_v2, M2, reversed=False)
-motor3 = DCMotor(md_v2, E1, reversed=True)
-motor4 = DCMotor(md_v2, E2, reversed=True)
-robot = DriveBase(MODE_MECANUM, m1=motor2, m2=motor1, m3=motor4, m4=motor3)
-servo1 = Servo(md_v2, S1, 180)
-servo2 = Servo(md_v2, S2, 180)
-servo3 = Servo(md_v2, S3, 180)
-servo4 = Servo(md_v2, S4, 180)
-motor5 = DCMotor(md_v2, M3, reversed=False)
-imu = MPU6050()
-angle_sensor = AngleSensor(imu)
-gamepad = Gamepad()
-btn_BOOT= aButton(BOOT_PIN)
-led_D13 = Pins(D13_PIN)
+# Khoang cach giua 2 lan doc the (ms) - dung chung cho ca 2 cam bien.
+POLL_INTERVAL_MS = 200
 
-def deinit():
-  robot.stop()
-  btn_BOOT.deinit()
 
-import yolo_uno
-yolo_uno.deinit = deinit
+def main():
+    configure_i2c2(EXIT_SCL_PIN, EXIT_SDA_PIN)
+    rfid_in = rfid              # I2C1 (bus mac dinh) - cam bien cong VAO
+    rfid_out = get_rfid("I2C2")  # I2C2 (bus mo rong) - cam bien cong RA
 
-async def task_v_M_x_T():
-  while True:
-    await asleep_ms(75)
-    if gamepad.data[BTN_TRIANGLE] == 1:
-      await servo4.run_steps(5)
-    if gamepad.data[BTN_CROSS] == 1:
-      await servo4.run_steps((-5))
-    if gamepad.data[BTN_SQUARE] == 1:
-      await servo3.run_steps((-5))
-    if gamepad.data[BTN_CIRCLE] == 1:
-      await servo3.run_steps(5)
-    if (gamepad.data[ARX]) > 50:
-      motor5.run(80)
-    if (gamepad.data[ARX]) <= -50:
-      motor5.run((-80))
+    print("RFID reader started: IN=I2C1, OUT=I2C2 (pins %s/%s)" % (EXIT_SCL_PIN, EXIT_SDA_PIN))
 
-async def task_w_F_d_x():
-  while True:
-    await asleep_ms(1000)
-    led_D13.toggle()
+    # Theo doi the dang nam truoc moi dau doc de chi gui 1 su kien cho moi
+    # lan CHAM the - neu khong debounce, giu the lau se gui lap lai lien tuc,
+    # spam serial va tao nhieu ban ghi RFID trung nhau o backend. 2 cam bien
+    # debounce doc lap nhau.
+    last_in = None
+    last_out = None
 
-async def setup():
+    while True:
+        try:
+            card_in = rfid_in.scan_card()
+        except Exception as exc:
+            print("RFID IN read error: %s" % exc)
+            card_in = ""
 
-  print('App started')
-  neopix.show(0, hex_to_rgb('#ff0000'))
-  motor3.set_encoder(rpm=350, ppr=11, gears=34)
-  motor4.set_encoder(rpm=350, ppr=11, gears=34)
-  robot.size(wheel=80, width=400)
-  servo1.limit(min=115, max=180)
-  servo2.limit(min=115, max=180)
-  servo3.limit(min=115, max=180)
-  servo4.limit(min=0, max=180)
-  angle_sensor.calibrate(250)
-  create_task(angle_sensor.run())
-  robot.angle_sensor(angle_sensor)
-  robot.use_gyro(True)
-  robot.speed(60, min_speed=40)
-  create_task(ble.wait_for_msg())
-  create_task(gamepad.run())
-  create_task(robot.run_teleop(gamepad, accel_steps=3))
-  neopix.show(0, hex_to_rgb('#4b0082'))
-  print((md_v2.battery()))
+        try:
+            card_out = rfid_out.scan_card()
+        except Exception as exc:
+            print("RFID OUT read error: %s" % exc)
+            card_out = ""
 
-  robot.on_teleop_command(BTN_L1, on_cmd_BTN_L1)
-  robot.on_teleop_command(BTN_L2, on_cmd_BTN_L2)
-  robot.on_teleop_command(BTN_R1, on_cmd_BTN_R1)
-  robot.on_teleop_command(BTN_R2, on_cmd_BTN_R2)
-  robot.on_teleop_command(BTN_THUMBR, on_cmd_BTN_THUMBR)
-  btn_BOOT.pressed(on_abutton_BOOT_pressed)
-  create_task(task_v_M_x_T())
-  create_task(task_w_F_d_x())
+        if card_in:
+            if card_in != last_in:
+                print("{in: %s}" % card_in)
+                last_in = card_in
+        else:
+            # The da roi khoi dau doc -> lan cham tiep theo (du cung the)
+            # duoc tinh la 1 su kien moi.
+            last_in = None
 
-async def main():
-  await setup()
-  while True:
-    await asleep_ms(100)
+        if card_out:
+            if card_out != last_out:
+                print("{out: %s}" % card_out)
+                last_out = card_out
+        else:
+            last_out = None
 
-run_loop(main())
+        sleep_ms(POLL_INTERVAL_MS)
 
+
+main()

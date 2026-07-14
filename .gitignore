@@ -31,6 +31,12 @@ node_modules/
 dist/
 out/
 
+# Playwright (tests/) - artifact chạy test, không phải source
+tests/.auth/
+tests/test-results/
+tests/playwright-report/
+tests/blob-report/
+
 # Logs
 *.log
 

@@ -25,7 +25,14 @@
 
 * { box-sizing: border-box; }
 
-html { text-size-adjust: 100%; -webkit-text-size-adjust: 100%; }
+/* Tự scale toàn bộ UI (chữ, khoảng cách, layout theo rem) theo độ rộng màn hình
+   máy tính thật - laptop nhỏ ~1280px tới màn rời 4K ~3840px. Mọi kích thước
+   dùng rem trong file này sẽ tự lớn/nhỏ theo tỉ lệ này, không cần set riêng lẻ. */
+html {
+  text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+  font-size: clamp(14px, 0.55vw + 8.5px, 19px);
+}
 
 body {
   margin: 0;
@@ -55,7 +62,7 @@ button, input, select, textarea { font: inherit; }
 /* ============================ Shell ============================ */
 .app-shell {
   display: grid;
-  grid-template-columns: 264px 1fr;
+  grid-template-columns: 16.5rem 1fr;
   min-height: 100vh;
   transition: grid-template-columns 180ms ease;
   position: relative;
@@ -139,7 +146,7 @@ button, input, select, textarea { font: inherit; }
 }
 
 /* ============================ Content ============================ */
-.content { padding: 20px 22px 36px; max-width: 1600px; }
+.content { padding: 1.25rem 1.375rem 2.25rem; max-width: 100rem; width: 100%; }
 
 .global-head {
   display: flex; align-items: flex-end; justify-content: space-between;
@@ -165,14 +172,14 @@ button, input, select, textarea { font: inherit; }
 
 /* ============================ KPI cards ============================ */
 .kpi-grid {
-  display: grid; gap: 12px; margin-bottom: 16px;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  display: grid; gap: 0.75rem; margin-bottom: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(11.25rem, 1fr));
 }
 .kpi-card {
   position: relative; overflow: hidden;
   background: linear-gradient(180deg, var(--surface), var(--surface-2));
   border: 1px solid var(--line); border-radius: var(--radius);
-  padding: 16px; box-shadow: var(--shadow-sm);
+  padding: 1rem; box-shadow: var(--shadow-sm);
 }
 .kpi-card::before {
   content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
@@ -189,8 +196,8 @@ button, input, select, textarea { font: inherit; }
 .kpi-bar span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--accent-2), var(--accent)); transition: width 400ms ease; }
 
 /* ============================ Panels ============================ */
-.view-grid { margin-bottom: 14px; }
-.view-grid.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.view-grid { margin-bottom: 0.875rem; }
+.view-grid.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem; }
 /* Cho phép con trong grid co lại để bảng/nội dung rộng cuộn trong khung, không phá layout. */
 .view-grid.two-col > *, .tables > *, .kpi-grid > * { min-width: 0; }
 
@@ -199,7 +206,7 @@ button, input, select, textarea { font: inherit; }
   border: 1px solid var(--line);
   border-radius: var(--radius);
   overflow: hidden;
-  margin-bottom: 14px;
+  margin-bottom: 0.875rem;
   box-shadow: var(--shadow-sm);
 }
 .panel.sub { box-shadow: none; background: var(--surface-2); }
@@ -207,16 +214,16 @@ button, input, select, textarea { font: inherit; }
 
 .panel-head {
   display: flex; align-items: center; justify-content: space-between;
-  gap: 12px; padding: 13px 16px; border-bottom: 1px solid var(--line-soft);
+  gap: 0.75rem; padding: 0.8125rem 1rem; border-bottom: 1px solid var(--line-soft);
 }
 .panel-head h3 { margin: 0; font-size: 0.98rem; font-weight: 700; letter-spacing: 0.1px; }
 .panel-head.inline { flex-wrap: wrap; }
-.panel-content { padding: 16px; }
+.panel-content { padding: 1rem; }
 .muted { color: var(--muted); }
 
 /* ============================ Forms ============================ */
-.camera-form { display: grid; grid-template-columns: 200px 1fr auto; gap: 10px; padding: 16px; }
-.stack-form { display: grid; gap: 12px; padding: 16px; }
+.camera-form { display: grid; grid-template-columns: 12.5rem 1fr auto; gap: 0.625rem; padding: 1rem; }
+.stack-form { display: grid; gap: 0.75rem; padding: 1rem; }
 
 input, select, button, textarea {
   min-height: 40px; border-radius: var(--radius-sm);
@@ -259,7 +266,7 @@ button.ghost:hover { background: #1c2b45; border-color: #38507a; color: #fff; }
 .focus-stage canvas { width: 100%; height: 100%; object-fit: contain; }
 .focus-stage .placeholder { position: absolute; color: #6d859f; }
 
-.camera-grid { display: grid; grid-template-columns: repeat(1, minmax(0, 1fr)); gap: 14px; }
+.camera-grid { display: grid; grid-template-columns: repeat(1, minmax(0, 1fr)); gap: 0.875rem; }
 .camera-card {
   background: var(--surface); border: 1px solid var(--line);
   border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-sm);
@@ -290,11 +297,11 @@ button.ghost:hover { background: #1c2b45; border-color: #38507a; color: #fff; }
 .toggle.on { border-color: rgba(52, 211, 153, 0.45); background: rgba(52, 211, 153, 0.14); color: #9cf5d9; }
 
 /* ============================ Tables ============================ */
-.tables { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
-.table-wrap { max-height: 320px; overflow: auto; }
-.table-wrap.tall { max-height: 460px; }
+.tables { display: grid; grid-template-columns: 1fr 1fr; gap: 0.875rem; }
+.table-wrap { max-height: 20rem; overflow: auto; }
+.table-wrap.tall { max-height: 28.75rem; }
 table { width: 100%; border-collapse: collapse; }
-th, td { text-align: left; border-bottom: 1px solid var(--line-soft); padding: 11px 14px; font-size: 0.84rem; }
+th, td { text-align: left; border-bottom: 1px solid var(--line-soft); padding: 0.6875rem 0.875rem; font-size: 0.84rem; }
 td { color: var(--text-dim); }
 th { color: var(--muted); font-weight: 600; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.5px; position: sticky; top: 0; background: var(--surface-3); z-index: 1; }
 tbody tr { transition: background 120ms ease; }
@@ -317,7 +324,7 @@ tbody tr:hover td { background: rgba(79, 134, 255, 0.07); }
 .lot-log-chip-out { background: rgba(248, 113, 113, 0.18); border-color: rgba(248, 113, 113, 0.45); color: #ffbcbc; }
 
 /* ============================ Occupancy bars ============================ */
-.occ-row { display: grid; grid-template-columns: 180px 1fr 110px; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--line-soft); }
+.occ-row { display: grid; grid-template-columns: 11.25rem 1fr 6.875rem; align-items: center; gap: 0.75rem; padding: 0.5625rem 0; border-bottom: 1px solid var(--line-soft); }
 .occ-row:last-child { border-bottom: 0; }
 .occ-name { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .occ-track { height: 10px; border-radius: 999px; background: rgba(148, 173, 211, 0.14); overflow: hidden; }
@@ -463,4 +470,23 @@ tbody tr:hover td { background: rgba(79, 134, 255, 0.07); }
 /* Màn rất hẹp: KPI 1 cột */
 @media (max-width: 360px) {
   .kpi-grid { grid-template-columns: 1fr; }
+}
+
+/* ============================ Màn hình máy tính lớn ============================
+   Từ FHD trở lên: nới rộng content, tăng mật độ cột thay vì để trống 2 bên. */
+@media (min-width: 1600px) {
+  .content { max-width: 112rem; }
+  .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(12.5rem, 1fr)); }
+}
+
+/* 2K/QHD (~2560px) */
+@media (min-width: 1920px) {
+  .app-shell { grid-template-columns: 18rem 1fr; }
+  .content { max-width: 128rem; }
+  .kpi-grid { grid-template-columns: repeat(auto-fit, minmax(13.5rem, 1fr)); }
+}
+
+/* 4K / màn siêu rộng: nới thêm content, panel 2 cột rộng ra thay vì kéo dài vô hạn */
+@media (min-width: 2560px) {
+  .content { max-width: 148rem; }
 }

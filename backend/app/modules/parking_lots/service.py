@@ -5,6 +5,7 @@ from pathlib import Path
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.parking_lots.model import ParkingLot
@@ -99,7 +100,11 @@ def delete_parking_lot(db: Session, lot_id: int) -> bool:
     if not lot:
         return False
     db.delete(lot)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Bãi xe còn lịch sử phiên gửi xe, không thể xóa")
     return True
 
 

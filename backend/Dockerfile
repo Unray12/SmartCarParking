@@ -11,7 +11,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /app
 
 COPY backend/requirements.txt backend/requirements.txt
-RUN pip install --no-cache-dir -r backend/requirements.txt
+# --timeout/--retries cao hơn mặc định (15s/5 lần) - mạng máy build (đặc biệt NUC)
+# có thể chậm/chập chờn giữa lúc tải package lớn (opencv/numpy/onnxruntime) gây
+# ReadTimeoutError. --default-timeout của pip tính cho MỖI lần đọc, không phải
+# tổng thời gian tải, nên set cao vẫn an toàn (không "treo" nếu mạng ổn).
+RUN pip install --no-cache-dir --default-timeout=180 --retries 10 -r backend/requirements.txt
 
 COPY backend/ backend/
 COPY frontend/ frontend/

@@ -285,6 +285,6 @@ class YoloOnnxPlateRecognizer:
             seen.add(plate)
 
             confidence = float(det_conf * ocr_conf) if ocr_conf else float(det_conf)
-            results.append(PlateDetection(plate=plate, confidence=confidence))
+            results.append(PlateDetection(plate=plate, confidence=confidence, box=(x1, y1, x2, y2)))
 
         return results

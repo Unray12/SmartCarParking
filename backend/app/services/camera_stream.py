@@ -326,18 +326,18 @@ class CameraStreamManager:
             return None, 0.0, 0
         return worker.latest_packet()
 
-    def test_camera_ai(self, camera_id: int) -> tuple[bool, list[PlateDetection]]:
+    def test_camera_ai(self, camera_id: int) -> tuple[bool, list[PlateDetection], np.ndarray | None]:
         frame_bytes, _ = self.get_latest_frame(camera_id)
         if not frame_bytes:
-            return False, []
+            return False, [], None
 
         frame_np = np.frombuffer(frame_bytes, dtype=np.uint8)
         frame_bgr = cv2.imdecode(frame_np, cv2.IMREAD_COLOR)
         if frame_bgr is None:
-            return False, []
+            return False, [], None
 
         detections = self._recognizer.detect(frame_bgr)
-        return True, detections
+        return True, detections, frame_bgr
 
     def _start_camera(self, camera_id: int, source_url: str) -> None:
         worker = CameraWorker(

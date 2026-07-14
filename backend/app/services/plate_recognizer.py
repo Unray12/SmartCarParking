@@ -15,6 +15,9 @@ PLATE_RE = re.compile(r"[^A-Z0-9]")
 class PlateDetection:
     plate: str
     confidence: float | None = None
+    # (x1, y1, x2, y2) toạ độ box biển số trên frame gốc đưa vào detect() - dùng để vẽ
+    # box lên ảnh snapshot. None nếu recognizer không trả toạ độ (ví dụ Paddle/Dummy).
+    box: tuple[int, int, int, int] | None = None
 
 
 class PlateRecognizer(Protocol):

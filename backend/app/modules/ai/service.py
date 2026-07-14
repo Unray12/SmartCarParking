@@ -61,7 +61,7 @@ def save_model(file: UploadFile) -> AiModelUploadOut:
 
 
 def test_camera_ai(camera_id: int, camera_manager: CameraStreamManager) -> AiTestResultOut:
-    frame_available, detections = camera_manager.test_camera_ai(camera_id)
+    frame_available, detections, _frame_bgr = camera_manager.test_camera_ai(camera_id)
     mapped = [AiDetectionOut(plate=item.plate, confidence=item.confidence) for item in detections]
 
     return AiTestResultOut(

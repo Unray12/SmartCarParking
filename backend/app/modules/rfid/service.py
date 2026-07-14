@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import cv2
+import numpy as np
 from sqlalchemy import and_, desc, select
 from sqlalchemy.orm import Session
 
@@ -71,21 +72,23 @@ def _persist_event(db: Session, payload: RfidEventIn, occurred_at: datetime) -> 
 def _detect_plate_via_ai(
     camera_manager: "CameraStreamManager | None",
     camera_id: int | None,
-) -> tuple[str | None, float | None]:
+) -> tuple[str | None, float | None, tuple[int, int, int, int] | None, "np.ndarray | None"]:
     """Chạy AI nhận diện NGAY lúc quét RFID (on-demand qua test_camera_ai - dùng frame
     mới nhất camera đang có, không phụ thuộc/không cần bật stream inference nền).
-    Chỉ gọi khi bãi có ai_enabled=True. Không raise - lỗi/không đọc được thì trả (None, None)."""
+    Chỉ gọi khi bãi có ai_enabled=True. Không raise - lỗi/không đọc được thì trả toàn None.
+    Trả kèm box + đúng frame đã chạy detect để vẽ box lên snapshot khớp toạ độ, tránh
+    phải chụp lại 1 frame khác lúc lưu ảnh (frame có thể đã đổi, box lệch)."""
     if camera_manager is None or not camera_id:
-        return None, None
+        return None, None, None, None
     try:
-        frame_available, detections = camera_manager.test_camera_ai(camera_id)
+        frame_available, detections, frame_bgr = camera_manager.test_camera_ai(camera_id)
     except Exception:
-        return None, None
+        return None, None, None, None
     if not frame_available or not detections:
-        return None, None
+        return None, None, None, None
     best = max(detections, key=lambda d: d.confidence or 0.0)
     plate = normalize_plate(best.plate)
-    return (plate or None), best.confidence
+    return (plate or None), best.confidence, best.box, frame_bgr
 
 
 def _resolve_lot(db: Session, lot_id: int | None) -> ParkingLot | None:
@@ -100,6 +103,14 @@ def _snapshot_root() -> Path:
     return root
 
 
+def _draw_plate_box(frame_bgr: "np.ndarray", box: tuple[int, int, int, int], plate: str) -> None:
+    """Vẽ khung xanh quanh biển số + chữ biển lên frame (sửa tại chỗ, đã copy trước khi gọi)."""
+    x1, y1, x2, y2 = (int(v) for v in box)
+    cv2.rectangle(frame_bgr, (x1, y1), (x2, y2), (0, 255, 0), 2)
+    label_y = y1 - 8 if y1 - 8 > 10 else y2 + 22
+    cv2.putText(frame_bgr, plate, (x1, label_y), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA)
+
+
 def _capture_snapshot(
     db: Session,
     camera_manager: "CameraStreamManager | None",
@@ -108,13 +119,24 @@ def _capture_snapshot(
     card_id: str,
     plate: str,
     occurred_at: datetime,
+    ai_frame_bgr: "np.ndarray | None" = None,
+    plate_box: tuple[int, int, int, int] | None = None,
 ) -> str | None:
     if not camera_id:
         return None
 
     frame_bytes: bytes | None = None
 
-    if camera_manager is not None:
+    # Tái dùng đúng frame vừa chạy AI detect (nếu có) - khớp toạ độ box, đỡ 1 lần chụp lại.
+    if ai_frame_bgr is not None:
+        frame_to_save = ai_frame_bgr.copy() if plate_box is not None else ai_frame_bgr
+        if plate_box is not None:
+            _draw_plate_box(frame_to_save, plate_box, plate)
+        enc_ok, jpeg = cv2.imencode(".jpg", frame_to_save)
+        if enc_ok:
+            frame_bytes = jpeg.tobytes()
+
+    if not frame_bytes and camera_manager is not None:
         for _ in range(5):
             frame_bytes, _ = camera_manager.get_latest_frame(camera_id)
             if frame_bytes:
@@ -174,14 +196,18 @@ def _handle_check_in(
     normalized_plate = normalize_plate(payload.plate) if payload.plate else ""
     chosen_plate_read: PlateRead | None = None
     entry_camera_id = lot.entry_camera_id if lot and lot.entry_camera_id else None
+    ai_box: tuple[int, int, int, int] | None = None
+    ai_frame_bgr: np.ndarray | None = None
 
     # Bãi bật AI + chưa có biển số tường minh -> detect ngay lúc quét (ưu tiên hơn
     # plate_reads nền vì đây là kết quả tươi đúng thời điểm quẹt thẻ). Bãi tắt AI thì
     # bỏ qua hoàn toàn bước này - giữ đúng hành vi cũ (biển số optional, không tự detect).
     if not normalized_plate and lot and lot.ai_enabled:
-        ai_plate, _ai_conf = _detect_plate_via_ai(camera_manager, entry_camera_id)
+        ai_plate, _ai_conf, ai_box, ai_frame_bgr = _detect_plate_via_ai(camera_manager, entry_camera_id)
         if ai_plate:
             normalized_plate = ai_plate
+        else:
+            ai_box, ai_frame_bgr = None, None
 
     if not normalized_plate:
         chosen_plate_read = _latest_unlinked_plate(db, occurred_at)
@@ -201,6 +227,8 @@ def _handle_check_in(
         card_id=payload.card_id,
         plate=normalized_plate,
         occurred_at=occurred_at,
+        ai_frame_bgr=ai_frame_bgr,
+        plate_box=ai_box,
     )
 
     session = ParkingSession(
@@ -265,15 +293,24 @@ def _handle_check_out(
 
     exit_camera_id = lot.exit_camera_id if lot and lot.exit_camera_id else None
 
-    # Bãi bật AI -> detect lại biển số ở camera cổng RA ngay lúc quét, so với biển đã
-    # lưu lúc vào. CHỦ Ý: không chặn check-out dù lệch (chỉ đánh dấu ai_plate_match=False
-    # để xem lại sau) - tránh kẹt xe khi AI đọc nhầm (biển bẩn/góc camera xấu/xe che biển).
-    # None = không đánh giá được (bãi tắt AI, hoặc AI không đọc được biển lúc ra).
+    # Bãi bật AI -> LUÔN detect lại biển số ở camera cổng RA ngay lúc quét (không chỉ khi
+    # đã biết biển từ lúc vào). Nếu lúc vào đã có biển thì so khớp như cũ (CHỦ Ý: không
+    # chặn check-out dù lệch, chỉ đánh dấu ai_plate_match=False để xem lại sau - tránh
+    # kẹt xe khi AI đọc nhầm). Nếu lúc vào KHÔNG đọc được biển (NO_PLATE_SENTINEL) thì
+    # dùng luôn biển đọc được lúc ra để điền vào session - tránh log/hiện thị bị null
+    # trong khi AI đã nhận diện được biển số thật.
     ai_plate_match: bool | None = None
-    if lot and lot.ai_enabled and active_session.plate != NO_PLATE_SENTINEL:
-        ai_plate, _ai_conf = _detect_plate_via_ai(camera_manager, exit_camera_id)
+    ai_box: tuple[int, int, int, int] | None = None
+    ai_frame_bgr: np.ndarray | None = None
+    if lot and lot.ai_enabled:
+        ai_plate, _ai_conf, ai_box, ai_frame_bgr = _detect_plate_via_ai(camera_manager, exit_camera_id)
         if ai_plate:
-            ai_plate_match = ai_plate == active_session.plate
+            if active_session.plate != NO_PLATE_SENTINEL:
+                ai_plate_match = ai_plate == active_session.plate
+            else:
+                active_session.plate = ai_plate
+        else:
+            ai_box, ai_frame_bgr = None, None
 
     exit_snapshot_path = _capture_snapshot(
         db=db,
@@ -283,6 +320,8 @@ def _handle_check_out(
         card_id=payload.card_id,
         plate=active_session.plate,
         occurred_at=occurred_at,
+        ai_frame_bgr=ai_frame_bgr,
+        plate_box=ai_box,
     )
 
     from app.modules.sessions.service import compute_duration_minutes, compute_fee

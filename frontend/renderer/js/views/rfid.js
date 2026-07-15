@@ -5,7 +5,24 @@ import { els } from '../dom.js';
 import { notify, showScanTick, fmtDate, fmtMoney, fmtDuration } from '../ui.js';
 
 const seenCaptureEventKeys = new Set();
+const seenRejectedEventKeys = new Set();
 const hooks = { onEvent: null };
+
+// Nhãn hiển thị cho result_status trả về từ backend (RfidEventResult.status) - dùng
+// chung cho cả bảng log lẫn toast thông báo, để user luôn hiểu rõ quẹt thẻ có hiệu
+// lực hay bị từ chối (ví dụ quẹt VÀO lần 2 khi thẻ chưa quẹt RA).
+export const RFID_STATUS_LABELS = {
+  checked_in: 'Đã ghi nhận xe VÀO',
+  checked_out: 'Đã ghi nhận xe RA',
+  already_in: 'Thẻ đã quẹt VÀO trước đó (chưa quẹt RA) - bỏ qua',
+  not_found: 'Không tìm thấy phiên gửi đang mở cho thẻ này',
+  plate_mismatch: 'Biển số quẹt RA không khớp lúc VÀO',
+  session_in: 'Xe đã ghi nhận VÀO',
+  session_out: 'Xe đã ghi nhận RA',
+};
+
+// Status bị từ chối/không tạo phiên mới - cần cảnh báo rõ cho user, không chỉ log âm thầm.
+const REJECTED_STATUSES = new Set(['already_in', 'not_found', 'plate_mismatch']);
 
 export function renderRfidLogs() {
   els.rfidLogBody.innerHTML = '';
@@ -15,10 +32,11 @@ export function renderRfidLogs() {
   }
   for (const item of appState.rfidLogs) {
     const tr = document.createElement('tr');
+    const statusLabel = RFID_STATUS_LABELS[item.status] || item.status;
     tr.innerHTML = `
       <td>${fmtDate(item.at)}</td>
       <td>${item.card_id}</td>
-      <td>${item.status}</td>
+      <td class="${REJECTED_STATUSES.has(item.status) ? 'rfid-log-rejected' : ''}">${statusLabel}</td>
       <td>${item.plate || '-'}</td>
     `;
     els.rfidLogBody.appendChild(tr);
@@ -43,10 +61,22 @@ export async function refreshRfidEventLogs() {
           notify(`RFID ${row.type === 'session_in' ? 'vào' : 'ra'} đã capture ảnh`, 'success');
         }
       }
+      // rfid_in/rfid_out mang result_status thật (checked_in/already_in/not_found/...) -
+      // báo riêng cho user biết lần quẹt này có bị từ chối không (ví dụ quẹt VÀO lần 2
+      // khi thẻ chưa quẹt RA), kể cả khi quẹt từ đầu đọc thật (không qua form test trên web).
+      if ((row.type === 'rfid_in' || row.type === 'rfid_out') && REJECTED_STATUSES.has(details.result_status)) {
+        const key = `reject:${row.type}:${details.card_id}:${row.timestamp}`;
+        if (!seenRejectedEventKeys.has(key)) {
+          seenRejectedEventKeys.add(key);
+          const label = RFID_STATUS_LABELS[details.result_status] || details.result_status;
+          showScanTick(`Thẻ ${details.card_id}: ${label}`);
+          notify(`Quẹt thẻ ${details.card_id}: ${label}`, 'warn');
+        }
+      }
       mapped.push({
         at: row.timestamp,
         card_id: details.card_id || details.rfid_card || '-',
-        status: row.type,
+        status: details.result_status || row.type,
         plate: details.plate || '-',
       });
       if (mapped.length >= 30) break;
@@ -137,10 +167,11 @@ export function initRfid(opts = {}) {
         : result.ai_plate_match === false
           ? ' · AI: KHÔNG khớp biển số (xem lại)'
           : '';
-      showScanTick(`RFID ${result.status} thành công`);
+      const statusLabel = RFID_STATUS_LABELS[result.status] || result.status;
       const capText = result.snapshot_path ? ' và đã capture ảnh' : '';
-      const noticeType = (result.status === 'plate_mismatch' || result.ai_plate_match === false) ? 'warn' : 'success';
-      notify(`RFID ${result.status}${capText}${feeText}${aiText}`, noticeType);
+      const noticeType = REJECTED_STATUSES.has(result.status) || result.ai_plate_match === false ? 'warn' : 'success';
+      showScanTick(`Thẻ ${cardId}: ${statusLabel}`);
+      notify(`${statusLabel}${capText}${feeText}${aiText}`, noticeType);
 
       els.rfidPlate.value = '';
       if (hooks.onEvent) await hooks.onEvent();

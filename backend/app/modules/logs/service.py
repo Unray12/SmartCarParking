@@ -36,8 +36,13 @@ def get_recent_logs(db: Session, limit: int = 100, hours: int = 24) -> list[LogE
             LogEntry(
                 timestamp=evt.received_at,
                 log_type=log_type,
-                message=f"RFID {evt.direction.upper()}: card={evt.card_id}, source={evt.source}",
-                details={"card_id": evt.card_id, "direction": evt.direction, "source": evt.source},
+                message=f"RFID {evt.direction.upper()}: card={evt.card_id}, source={evt.source}, result={evt.result_status}",
+                details={
+                    "card_id": evt.card_id,
+                    "direction": evt.direction,
+                    "source": evt.source,
+                    "result_status": evt.result_status,
+                },
             )
         )
 

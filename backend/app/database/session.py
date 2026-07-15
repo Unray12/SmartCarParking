@@ -61,6 +61,12 @@ def _ensure_runtime_schema() -> None:
                     continue
                 conn.execute(text(f"ALTER TABLE parking_sessions ADD COLUMN {name} {sql_type}"))
 
+    if "rfid_events" in tables:
+        event_cols = {col["name"] for col in inspector.get_columns("rfid_events")}
+        if "result_status" not in event_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE rfid_events ADD COLUMN result_status VARCHAR(32)"))
+
     if "parking_lots" in tables:
         lot_cols = {col["name"] for col in inspector.get_columns("parking_lots")}
         if "capacity" not in lot_cols:

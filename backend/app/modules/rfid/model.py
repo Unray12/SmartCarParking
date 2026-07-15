@@ -17,6 +17,11 @@ class RfidEvent(Base):
     source: Mapped[str] = mapped_column(String(64), default="http", nullable=False)
     received_at: Mapped[datetime] = mapped_column(DateTime, default=utcnow, index=True, nullable=False)
     payload_json: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Kết quả xử lý sự kiện (checked_in/checked_out/already_in/not_found/plate_mismatch)
+    # - lưu lại để UI phân biệt được "quẹt thành công" và "quẹt bị từ chối" (ví dụ quẹt
+    # IN lần 2 khi thẻ chưa quẹt OUT) ngay cả khi xem qua log/poll, không chỉ lúc gọi API
+    # trực tiếp mới thấy status.
+    result_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
 
 
 class RfidCard(Base):

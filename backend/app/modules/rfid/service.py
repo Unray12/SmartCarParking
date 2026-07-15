@@ -58,15 +58,17 @@ def _latest_unlinked_plate(db: Session, occurred_at: datetime) -> PlateRead | No
     )
 
 
-def _persist_event(db: Session, payload: RfidEventIn, occurred_at: datetime) -> None:
+def _persist_event(db: Session, payload: RfidEventIn, occurred_at: datetime, result_status: str | None = None) -> None:
     event = RfidEvent(
         card_id=payload.card_id,
         direction=payload.direction,
         source=payload.source,
         received_at=occurred_at,
         payload_json=json.dumps(payload.data, ensure_ascii=False),
+        result_status=result_status,
     )
     db.add(event)
+    db.commit()
 
 
 def _detect_plate_via_ai(
@@ -367,13 +369,18 @@ def ingest_rfid_event(
     camera_manager: "CameraStreamManager | None" = None,
 ) -> RfidEventResult:
     occurred_at = payload.occurred_at or datetime.utcnow()
-    _persist_event(db, payload, occurred_at)
     lot = _resolve_lot(db, payload.lot_id)
 
     if payload.direction == "in":
-        return _handle_check_in(db, payload, occurred_at, lot=lot, camera_manager=camera_manager)
+        result = _handle_check_in(db, payload, occurred_at, lot=lot, camera_manager=camera_manager)
+    else:
+        result = _handle_check_out(db, payload, occurred_at, lot=lot, camera_manager=camera_manager)
 
-    return _handle_check_out(db, payload, occurred_at, lot=lot, camera_manager=camera_manager)
+    # Lưu event SAU khi đã biết kết quả xử lý - để result_status phản ánh đúng thẻ này
+    # bị từ chối (already_in/not_found/plate_mismatch) hay xử lý thành công, giúp UI phân
+    # biệt được ngay cả khi xem qua log/poll (không chỉ lúc gọi API trực tiếp mới có status).
+    _persist_event(db, payload, occurred_at, result_status=result.status)
+    return result
 
 
 # ---- RfidCard CRUD ----

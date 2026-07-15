@@ -158,11 +158,16 @@ class CameraWorker:
                 reconnect_backoff = min(reconnect_backoff * 1.4, 1.5)
                 continue
 
-            # The grab() above already pulled the freshest frame; decode THAT one
-            # so we deliver every frame (smoothness). Only skip extra frames when
-            # capture_skip_grabs > 0 (latency trim on unstable links).
+            # capture_skip_grabs > 0: cố gắng vứt thêm frame cũ còn tồn trong buffer để
+            # bắt kịp frame mới nhất (trim độ trễ) - CHỈ khi grab() còn thành công (tức
+            # còn frame mới hơn thật sự chờ sẵn). Dừng ngay khi 1 lần grab() thất bại
+            # (nguồn không kịp đẩy backlog, ví dụ HTTP/MJPEG chậm hoặc ảnh tĩnh) và vẫn
+            # retrieve() frame đã grab() thành công gần nhất - tránh lỗi "mất hẳn frame"
+            # (đã tự phát hiện bug này: gọi grab() thừa vô điều kiện làm retrieve() sau
+            # đó fail hoàn toàn với nguồn không có backlog để vứt).
             for _ in range(max(0, self._config.capture_skip_grabs)):
-                cap.grab()
+                if not cap.grab():
+                    break
 
             ok, frame = cap.retrieve()
             if not ok or frame is None:

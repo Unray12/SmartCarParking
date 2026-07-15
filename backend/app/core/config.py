@@ -34,10 +34,25 @@ class Settings(BaseSettings):
     stream_target_fps: int = 25
     stream_jpeg_quality: int = 82
     stream_max_width: int = 1280
+    # >0: sau grab() đầu tiên, grab() thêm N lần rồi mới retrieve() - chủ động vứt bớt
+    # frame cũ còn tồn trong buffer nội bộ của FFmpeg/OS socket để luôn hiển thị frame
+    # MỚI NHẤT có thể, đánh đổi lấy fps hiển thị thấp hơn 1 chút. CHỈ AN TOÀN với nguồn
+    # liên tục đẩy frame nhanh hơn tốc độ mình đọc (RTSP camera thật) - đã tự verify: bật
+    # giá trị này cho nguồn HTTP/MJPEG tốc độ thấp (hoặc test bằng 1 ảnh tĩnh) làm
+    # retrieve() sau grab() thừa bị fail liên tục -> MẤT HẲN frame, không phải chỉ giật.
+    # Mặc định để 0 (an toàn cho mọi loại nguồn); chỉ tăng lên 1-2 nếu bạn CHẮC CHẮN
+    # camera là RTSP thật, đang chạy ổn định, và vẫn còn thấy trễ sau khi đã giảm max_delay.
     stream_capture_skip_grabs: int = 0
     stream_ws_target_fps: int = 25
     stream_rtsp_transport: str = "tcp"
-    stream_ffmpeg_capture_options: str = "fflags;nobuffer|flags;low_delay|reorder_queue_size;1024|max_delay;1000000|fflags;discardcorrupt|allowed_media_types;video"
+    # max_delay thấp (100ms thay vì 500ms/1s mặc định phổ biến) để FFmpeg không giữ lại
+    # gói tin chờ ghép nối trước khi trả frame - đánh đổi lấy rủi ro giật hình nhẹ trên
+    # mạng kém ổn định. LƯU Ý: chỉ được liệt kê MỖI KEY 1 LẦN - OpenCV parse chuỗi này
+    # thành av_dict rồi set từng option, key trùng sẽ bị GHI ĐÈ (không cộng dồn), nên
+    # 2 flag của fflags phải gộp chung bằng dấu "+" (nobuffer+discardcorrupt) chứ không
+    # tách thành 2 mục "fflags;..." riêng (mục sau sẽ xoá mất mục trước, "nobuffer" sẽ
+    # coi như never được set - đây là bug thực tế từng có trong default cũ của biến này).
+    stream_ffmpeg_capture_options: str = "fflags;nobuffer+discardcorrupt|flags;low_delay|reorder_queue_size;0|max_delay;100000|allowed_media_types;video"
     stream_infer_every_n_frames: int = 0
     stream_enable_inference: bool = False
     stream_plate_dedupe_seconds: int = 8

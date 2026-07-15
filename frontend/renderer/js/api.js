@@ -25,6 +25,14 @@ export function getStoredUser() {
   return localStorage.getItem(USER_KEY) || '';
 }
 
+// WebSocket không tự gắn được header Authorization (browser `new WebSocket(url)` không
+// cho set header tuỳ ý) - backend yêu cầu token qua query string ?token= cho endpoint này.
+export function wsCameraUrl(cameraId) {
+  const token = getToken();
+  const base = `${WS_BASE}/ws/cameras/${cameraId}`;
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+}
+
 function isPublicAuthPath(path) {
   return path.includes('/auth/login') || path.includes('/auth/reset-password');
 }

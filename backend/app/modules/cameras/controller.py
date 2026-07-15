@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.database.session import get_db
 from app.dependencies import get_camera_manager
+from app.modules.auth.security import decode_token
 from app.modules.cameras.schema import CameraCreate, CameraOut, CameraToggleRequest, CameraUpdateRequest
 from app.modules.cameras.service import (
     create_camera,
@@ -20,7 +21,9 @@ from app.services.camera_stream import CameraStreamManager
 # REST router (sẽ được gắn prefix /api/v1 + bảo vệ token ở router.py)
 router = APIRouter(prefix="/cameras", tags=["cameras"])
 
-# WebSocket router riêng — KHÔNG nằm dưới /api/v1, KHÔNG yêu cầu token (WS để mở).
+# WebSocket router riêng — KHÔNG nằm dưới /api/v1 (browser `new WebSocket(url)` không tự
+# gắn được header Authorization), nhưng vẫn bắt buộc JWT hợp lệ qua query string ?token=
+# trước khi accept() - xem check trong ws_camera_stream bên dưới.
 ws_router = APIRouter()
 
 
@@ -69,6 +72,12 @@ def update_camera_endpoint(
 
 @ws_router.websocket("/ws/cameras/{camera_id}")
 async def ws_camera_stream(websocket: WebSocket, camera_id: int) -> None:
+    token = websocket.query_params.get("token")
+    payload = decode_token(token) if token else None
+    if not payload or not payload.get("sub"):
+        await websocket.close(code=1008)
+        return
+
     await websocket.accept()
     camera_manager: CameraStreamManager = websocket.app.state.camera_manager
     ws_target_fps = int(getattr(websocket.app.state, "stream_ws_target_fps", 25))

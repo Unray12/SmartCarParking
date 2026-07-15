@@ -1,10 +1,18 @@
 // Tiện ích UI dùng chung: thông báo, toast, format, occupancy helpers.
-import { API_BASE } from './api.js';
+import { API_BASE, getToken } from './api.js';
 import { appState } from './state.js';
 import { els } from './dom.js';
 
 let noticeTimeout = null;
 let scanTickTimeout = null;
+
+// Escape trước khi nội suy vào innerHTML - các field như tên bãi/tên camera/card_id/
+// owner_name là text người dùng tự nhập tự do (không giới hạn ký tự), nếu chèn thẳng vào
+// innerHTML sẽ dính stored XSS (ví dụ đặt tên bãi là "<img src=x onerror=...>").
+const HTML_ESCAPE_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
+export function escapeHtml(value) {
+  return String(value ?? '').replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch]);
+}
 
 export function notify(message, type = 'info') {
   els.globalNotice.textContent = message;
@@ -60,10 +68,19 @@ export function fmtDuration(minutes) {
   return rem ? `${h}h${String(rem).padStart(2, '0')}` : `${h}h`;
 }
 
+// Ảnh snapshot giờ yêu cầu token (backend đã bỏ endpoint public hoàn toàn) - <img src>
+// không tự gắn được header Authorization nên phải đính token qua query string ?token=.
+function withToken(url) {
+  const token = getToken();
+  if (!token) return url;
+  const sep = url.includes('?') ? '&' : '?';
+  return `${url}${sep}token=${encodeURIComponent(token)}`;
+}
+
 export function absoluteApiUrl(path) {
   if (!path) return '';
-  if (path.startsWith('http://') || path.startsWith('https://')) return path;
-  return `${API_BASE}${path}`;
+  if (path.startsWith('http://') || path.startsWith('https://')) return withToken(path);
+  return withToken(`${API_BASE}${path}`);
 }
 
 export function absoluteApiUrlNoCache(path) {

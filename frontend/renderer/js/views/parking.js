@@ -1,8 +1,8 @@
 // Trang Parking Lots: CRUD bãi, sức chứa/occupancy, ảnh chụp, chi tiết bãi (live + capture + log).
-import { api, WS_BASE } from '../api.js';
+import { api, wsCameraUrl } from '../api.js';
 import { appState } from '../state.js';
 import { els } from '../dom.js';
-import { notify, fmtDate, absoluteApiUrl, absoluteApiUrlNoCache, cameraNameById, occClass, occRate } from '../ui.js';
+import { notify, fmtDate, absoluteApiUrl, absoluteApiUrlNoCache, cameraNameById, occClass, occRate, escapeHtml } from '../ui.js';
 
 const lotDetailState = {
   selectedLotId: null,
@@ -108,14 +108,14 @@ function renderParkingLots(lots) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${lot.id}</td>
-      <td>${lot.name}</td>
+      <td>${escapeHtml(lot.name)}</td>
       <td>${cap}</td>
       <td style="min-width:140px">
         <div class="occ-track"><div class="occ-fill ${occClass(rate)}" style="width:${rate}%"></div></div>
         <span class="occ-meta">${occ}/${cap} · ${rate}%</span>
       </td>
-      <td>${cameraNameById(lot.entry_camera_id)}</td>
-      <td>${cameraNameById(lot.exit_camera_id)}</td>
+      <td>${escapeHtml(cameraNameById(lot.entry_camera_id))}</td>
+      <td>${escapeHtml(cameraNameById(lot.exit_camera_id))}</td>
       <td>${lot.is_active ? '<span class="chip chip-in">Active</span>' : '<span class="chip chip-out">Inactive</span>'}</td>
       <td>${lot.ai_enabled ? '<span class="chip chip-in">Bật</span>' : '<span class="chip chip-out">Tắt</span>'}</td>
       <td><button class="ghost lot-manage-btn" data-lot-id="${lot.id}">Quản lý</button></td>
@@ -197,7 +197,7 @@ function openLotStream(kind, cameraId) {
   let decoding = false;
   let animFrameId = null;
 
-  const ws = new WebSocket(`${WS_BASE}/ws/cameras/${cameraId}`);
+  const ws = new WebSocket(wsCameraUrl(cameraId));
   ws.binaryType = 'arraybuffer';
 
   async function consumeFrame() {
@@ -254,7 +254,7 @@ function openSharedLotStream(cameraId) {
   let decoding = false;
   let animFrameId = null;
 
-  const ws = new WebSocket(`${WS_BASE}/ws/cameras/${cameraId}`);
+  const ws = new WebSocket(wsCameraUrl(cameraId));
   ws.binaryType = 'arraybuffer';
 
   async function consumeFrame() {
@@ -373,8 +373,8 @@ function renderLotDetailLogs(sessions) {
     tr.innerHTML = `
       <td>${fmtDate(row.at)}</td>
       <td><span class="lot-log-chip ${row.direction === 'in' ? 'lot-log-chip-in' : 'lot-log-chip-out'}">${directionLabel}</span></td>
-      <td>${row.plate}</td>
-      <td>${row.card}</td>
+      <td>${escapeHtml(row.plate)}</td>
+      <td>${escapeHtml(row.card)}</td>
       <td><span class="lot-log-chip ${row.status === 'checked_in' ? 'lot-log-chip-in' : 'lot-log-chip-out'}">${statusLabel}</span></td>
       <td>${aiLabel}</td>
     `;
@@ -480,11 +480,11 @@ export async function refreshSnapshotList() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${fmtDate(row.timestamp)}</td>
-      <td>${lotName}</td>
+      <td>${escapeHtml(lotName)}</td>
       <td>${row.direction}</td>
-      <td>${row.plate}</td>
-      <td>${row.rfid_card}</td>
-      <td>${cameraNameById(row.camera_id)}</td>
+      <td>${escapeHtml(row.plate)}</td>
+      <td>${escapeHtml(row.rfid_card)}</td>
+      <td>${escapeHtml(cameraNameById(row.camera_id))}</td>
       <td><a href="${absoluteApiUrl(row.image_url)}" target="_blank" rel="noopener">Xem ảnh</a></td>
     `;
     els.snapshotBody.appendChild(tr);

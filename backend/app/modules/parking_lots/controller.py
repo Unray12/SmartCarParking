@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.database.session import get_db
+from app.modules.auth.dependencies import get_current_user_flexible
 from app.modules.parking_lots.schema import ParkingLotCreate, ParkingLotOut, ParkingLotOverviewOut, ParkingLotUpdate, SnapshotItemOut
 from app.modules.parking_lots.service import (
     create_parking_lot,
@@ -23,8 +24,9 @@ from app.modules.parking_lots.service import (
 # Protected router (gắn prefix /api/v1 + token ở router.py)
 router = APIRouter(tags=["parking-lots"])
 
-# Public router cho việc serve file ảnh — <img>/<a> trên browser KHÔNG gửi được
-# header Authorization, nên endpoint này để mở (giống WS).
+# <img>/<a> trên browser KHÔNG gửi được header Authorization, nên router này không nằm
+# dưới dependencies=_auth ở router.py - nhưng vẫn bắt buộc token qua query string
+# (?token=) bằng get_current_user_flexible ở từng endpoint, KHÔNG để mở hoàn toàn.
 files_router = APIRouter(tags=["snapshots"])
 
 
@@ -69,7 +71,7 @@ def parking_lot_overview_endpoint(lot_id: int, limit: int = 100, db: Session = D
 
 
 @files_router.get("/snapshots/files/{folder}/{filename}", include_in_schema=False)
-def snapshot_file_endpoint(folder: str, filename: str) -> FileResponse:
+def snapshot_file_endpoint(folder: str, filename: str, _user: str = Depends(get_current_user_flexible)) -> FileResponse:
     settings = get_settings()
     root = (Path(__file__).resolve().parents[3] / settings.snapshot_store_dir).resolve()
     candidate = (root / folder / filename).resolve()

@@ -2,7 +2,7 @@
 import { api } from '../api.js';
 import { appState } from '../state.js';
 import { els } from '../dom.js';
-import { notify, showScanTick, fmtDate, fmtMoney, fmtDuration } from '../ui.js';
+import { notify, showScanTick, fmtDate, fmtMoney, fmtDuration, escapeHtml } from '../ui.js';
 
 const seenCaptureEventKeys = new Set();
 const seenRejectedEventKeys = new Set();
@@ -35,9 +35,9 @@ export function renderRfidLogs() {
     const statusLabel = RFID_STATUS_LABELS[item.status] || item.status;
     tr.innerHTML = `
       <td>${fmtDate(item.at)}</td>
-      <td>${item.card_id}</td>
+      <td>${escapeHtml(item.card_id)}</td>
       <td class="${REJECTED_STATUSES.has(item.status) ? 'rfid-log-rejected' : ''}">${statusLabel}</td>
-      <td>${item.plate || '-'}</td>
+      <td>${escapeHtml(item.plate) || '-'}</td>
     `;
     els.rfidLogBody.appendChild(tr);
   }
@@ -106,11 +106,11 @@ function renderRfidCards() {
   for (const card of appState.rfidCards) {
     const tr = document.createElement('tr');
     tr.innerHTML = `
-      <td>${card.card_id}</td>
-      <td>${card.plate}</td>
-      <td>${card.owner_name || '-'}</td>
+      <td>${escapeHtml(card.card_id)}</td>
+      <td>${escapeHtml(card.plate)}</td>
+      <td>${escapeHtml(card.owner_name) || '-'}</td>
       <td>${card.is_active ? 'Hoạt động' : 'Khóa'}</td>
-      <td><button class="ghost delete-card-btn" data-card-id="${card.card_id}">Xóa</button></td>
+      <td><button class="ghost delete-card-btn" data-card-id="${escapeHtml(card.card_id)}">Xóa</button></td>
     `;
     els.rfidCardBody.appendChild(tr);
   }

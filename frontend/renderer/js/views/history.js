@@ -1,7 +1,7 @@
 // Trang Sessions + Plate Reads: bảng lịch sử + tìm kiếm/lọc client-side.
 import { api } from '../api.js';
 import { els } from '../dom.js';
-import { notify, fmtDate, fmtDuration, fmtMoney } from '../ui.js';
+import { notify, fmtDate, fmtDuration, fmtMoney, escapeHtml } from '../ui.js';
 
 let allSessions = [];
 let allPlates = [];
@@ -25,8 +25,8 @@ export function renderSessionsTable() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${row.id}</td>
-      <td>${row.plate || '-'}</td>
-      <td>${row.rfid_card}</td>
+      <td>${escapeHtml(row.plate) || '-'}</td>
+      <td>${escapeHtml(row.rfid_card)}</td>
       <td>${fmtDate(row.entry_time)}</td>
       <td>${fmtDate(row.exit_time)}</td>
       <td>${fmtDuration(row.duration_minutes)}</td>
@@ -53,8 +53,8 @@ export function renderPlatesTable() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${fmtDate(row.seen_at)}</td>
-      <td>${row.camera_name}</td>
-      <td>${row.plate}</td>
+      <td>${escapeHtml(row.camera_name)}</td>
+      <td>${escapeHtml(row.plate)}</td>
       <td>${row.confidence == null ? '-' : row.confidence.toFixed(3)}</td>
       <td>${row.linked ? '<span class="chip chip-in">Yes</span>' : '<span class="chip chip-out">No</span>'}</td>
     `;

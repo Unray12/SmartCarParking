@@ -1,7 +1,7 @@
 // Trang Overview: KPI tổng quan + occupancy theo bãi + 2 bảng (xe đang gửi, biển số gần nhất).
 import { api } from '../api.js';
 import { els } from '../dom.js';
-import { fmtDate, fmtMoney, occClass, occRate } from '../ui.js';
+import { fmtDate, fmtMoney, occClass, occRate, escapeHtml } from '../ui.js';
 
 export async function refreshDashboard() {
   const summary = await api('/api/v1/dashboard/summary');
@@ -28,8 +28,8 @@ export async function refreshActiveSessions() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${row.id}</td>
-      <td>${row.plate || '-'}</td>
-      <td>${row.rfid_card}</td>
+      <td>${escapeHtml(row.plate) || '-'}</td>
+      <td>${escapeHtml(row.rfid_card)}</td>
       <td>${fmtDate(row.entry_time)}</td>
     `;
     els.sessionBody.appendChild(tr);
@@ -47,8 +47,8 @@ export async function refreshRecentPlates() {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${fmtDate(row.seen_at)}</td>
-      <td>${row.camera_name}</td>
-      <td>${row.plate}</td>
+      <td>${escapeHtml(row.camera_name)}</td>
+      <td>${escapeHtml(row.plate)}</td>
       <td>${row.linked ? 'Yes' : 'No'}</td>
     `;
     els.plateBody.appendChild(tr);
@@ -70,7 +70,7 @@ export function renderOverviewLots(lots) {
     const row = document.createElement('div');
     row.className = 'occ-row';
     row.innerHTML = `
-      <div class="occ-name">${lot.name}</div>
+      <div class="occ-name">${escapeHtml(lot.name)}</div>
       <div class="occ-track"><div class="occ-fill ${occClass(rate)}" style="width:${rate}%"></div></div>
       <div class="occ-meta"><strong>${occ}</strong>/${cap} · ${rate}%</div>
     `;

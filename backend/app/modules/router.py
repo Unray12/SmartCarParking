@@ -21,9 +21,11 @@ _auth = [Depends(get_current_user)]
 # Nhóm /api/v1
 api_v1 = APIRouter(prefix="/api/v1")
 
-# Public (không cần token)
-api_v1.include_router(auth_router)            # /auth/login, /auth/reset-password public;
-                                              # /auth/me & /auth/change-password tự bảo vệ ở endpoint
+# Public (không cần Bearer token qua router, nhưng KHÔNG có nghĩa mở hoàn toàn - xem
+# comment trong từng controller: /auth/login có rate-limit, /auth/reset-password vừa
+# rate-limit vừa chặn theo IP nội bộ, /auth/me & /auth/change-password tự bảo vệ bằng
+# get_current_user, snapshot files bảo vệ bằng get_current_user_flexible (?token=)).
+api_v1.include_router(auth_router)
 api_v1.include_router(snapshot_files_router)  # serve ảnh (img/<a> không gửi được header)
 
 # Protected (yêu cầu Bearer token)

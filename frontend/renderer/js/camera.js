@@ -1,4 +1,4 @@
-import { WS_BASE } from './api.js';
+import { wsCameraUrl } from './api.js';
 
 export function createCameraModule({ els, state, api, notify, onCameraMutated, onCamerasUpdated }) {
   const cameraViews = new Map();
@@ -81,7 +81,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       return;
     }
 
-    const ws = new WebSocket(`${WS_BASE}/ws/cameras/${cameraId}`);
+    const ws = new WebSocket(wsCameraUrl(cameraId));
     ws.binaryType = 'arraybuffer';
 
     ws.onmessage = (ev) => {
@@ -274,7 +274,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       if (local.paused || local.pausedForFocus || state.currentView !== 'cameras') return;
 
       closeSocket();
-      const ws = new WebSocket(`${WS_BASE}/ws/cameras/${cameraId}`);
+      const ws = new WebSocket(wsCameraUrl(cameraId));
       ws.binaryType = 'arraybuffer';
 
       ws.onmessage = (ev) => {

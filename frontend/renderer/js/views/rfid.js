@@ -8,6 +8,14 @@ const seenCaptureEventKeys = new Set();
 const seenRejectedEventKeys = new Set();
 const hooks = { onEvent: null };
 
+// Lần poll ĐẦU TIÊN sau khi load trang chỉ để đồng bộ "đã biết" các log cũ (trong cửa sổ
+// 24h) vào 2 Set trên - KHÔNG bắn toast cho chúng. Nếu không có cờ này, Set luôn rỗng lúc
+// vừa load trang (bị reset theo phiên trình duyệt) nên mọi log cũ chưa "seen" sẽ bị hiểu
+// nhầm là vừa mới xảy ra và bắn toast lại mỗi lần load/refresh trang - dù sự kiện đó đã
+// xảy ra từ lâu. Chỉ từ lần poll thứ 2 (sự kiện thật sự mới phát sinh sau khi mở trang)
+// mới bắn toast.
+let hasSyncedInitialLogs = false;
+
 // Nhãn hiển thị cho result_status trả về từ backend (RfidEventResult.status) - dùng
 // chung cho cả bảng log lẫn toast thông báo, để user luôn hiểu rõ quẹt thẻ có hiệu
 // lực hay bị từ chối (ví dụ quẹt VÀO lần 2 khi thẻ chưa quẹt RA).
@@ -57,8 +65,10 @@ export async function refreshRfidEventLogs() {
         const key = `${row.type}:${details.session_id || '-'}:${snapshotUrl}`;
         if (!seenCaptureEventKeys.has(key)) {
           seenCaptureEventKeys.add(key);
-          showScanTick(`RFID ${row.type === 'session_in' ? 'vào' : 'ra'} thành công`);
-          notify(`RFID ${row.type === 'session_in' ? 'vào' : 'ra'} đã capture ảnh`, 'success');
+          if (hasSyncedInitialLogs) {
+            showScanTick(`RFID ${row.type === 'session_in' ? 'vào' : 'ra'} thành công`);
+            notify(`RFID ${row.type === 'session_in' ? 'vào' : 'ra'} đã capture ảnh`, 'success');
+          }
         }
       }
       // rfid_in/rfid_out mang result_status thật (checked_in/already_in/not_found/...) -
@@ -68,9 +78,11 @@ export async function refreshRfidEventLogs() {
         const key = `reject:${row.type}:${details.card_id}:${row.timestamp}`;
         if (!seenRejectedEventKeys.has(key)) {
           seenRejectedEventKeys.add(key);
-          const label = RFID_STATUS_LABELS[details.result_status] || details.result_status;
-          showScanTick(`Thẻ ${details.card_id}: ${label}`);
-          notify(`Quẹt thẻ ${details.card_id}: ${label}`, 'warn');
+          if (hasSyncedInitialLogs) {
+            const label = RFID_STATUS_LABELS[details.result_status] || details.result_status;
+            showScanTick(`Thẻ ${details.card_id}: ${label}`);
+            notify(`Quẹt thẻ ${details.card_id}: ${label}`, 'warn');
+          }
         }
       }
       mapped.push({
@@ -81,6 +93,7 @@ export async function refreshRfidEventLogs() {
       });
       if (mapped.length >= 30) break;
     }
+    hasSyncedInitialLogs = true;
     appState.rfidLogs = mapped;
     renderRfidLogs();
   } catch (err) {

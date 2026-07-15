@@ -74,3 +74,37 @@ def _ensure_runtime_schema() -> None:
     if "parking_sessions" in tables:
         with engine.begin() as conn:
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_sessions_lot_exit ON parking_sessions (lot_id, exit_time)"))
+            # Partial index CHỈ chứa session chưa check-out (exit_time IS NULL) - đây là
+            # đường truy vấn nóng nhất của cả app: mỗi lần quẹt RFID (vào lẫn ra) đều phải
+            # tìm "session đang gửi của thẻ này" (_latest_active_session_by_card). Vì
+            # partial index chỉ vật lý hoá đúng các dòng thoả điều kiện, kích thước index
+            # này giữ nguyên tỉ lệ với SỐ XE ĐANG GỬI (vài chục/trăm dòng), KHÔNG phình to
+            # theo tổng lịch sử gửi xe (có thể lên hàng triệu dòng sau nhiều năm) - tách
+            # "đang gửi" khỏi "đã ra" ngay trong index, không cần bảng riêng.
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_sessions_active_by_card "
+                    "ON parking_sessions (rfid_card, entry_time DESC) WHERE exit_time IS NULL"
+                )
+            )
+            # Cùng lý do trên nhưng phục vụ đếm occupancy theo bãi (_active_count_by_lot,
+            # chạy mỗi lần poll danh sách bãi) - tách riêng khỏi ix_sessions_lot_exit (vẫn
+            # giữ để phục vụ tra cứu lịch sử theo bãi bao gồm cả xe đã ra).
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_sessions_active_by_lot "
+                    "ON parking_sessions (lot_id) WHERE exit_time IS NULL"
+                )
+            )
+
+    # Cùng ý tưởng partial index cho plate_reads: _latest_unlinked_plate chỉ cần tìm
+    # trong các bản ghi CHƯA được gán vào session nào (linked=False) - đa số bản ghi cũ
+    # đã linked=True nên loại hẳn ra khỏi index giữ index này luôn nhỏ.
+    if "plate_reads" in tables:
+        with engine.begin() as conn:
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_plate_reads_unlinked "
+                    "ON plate_reads (seen_at DESC) WHERE linked = false"
+                )
+            )

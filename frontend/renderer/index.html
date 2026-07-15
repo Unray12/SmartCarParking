@@ -4,7 +4,10 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Smart Parking Dashboard</title>
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="styles/base.css" />
+    <link rel="stylesheet" href="styles/components.css" />
+    <link rel="stylesheet" href="styles/modal-auth.css" />
+    <link rel="stylesheet" href="styles/responsive.css" />
   </head>
   <body>
     <div class="app-shell" id="appShell">
@@ -543,13 +546,20 @@
             </article>
 
             <article class="panel">
-              <div class="panel-head"><h3>Test camera với AI</h3></div>
-              <form id="aiTestForm" class="stack-form">
+              <div class="panel-head"><h3>Test camera với AI (trực tiếp)</h3></div>
+              <div class="stack-form">
                 <select id="aiCameraSelect"></select>
-                <button type="submit">Chạy test</button>
-              </form>
+                <div class="ai-live-controls">
+                  <button type="button" id="aiLiveStartBtn">Bắt đầu</button>
+                  <button type="button" class="ghost" id="aiLiveStopBtn" disabled>Dừng</button>
+                </div>
+              </div>
               <div class="panel-content">
-                <pre class="result" id="aiTestResult">Chưa có kết quả test</pre>
+                <div class="ai-live-stage">
+                  <canvas id="aiLiveCanvas"></canvas>
+                  <span class="placeholder" id="aiLivePlaceholder">Chọn camera rồi bấm Bắt đầu</span>
+                </div>
+                <p class="muted" id="aiLiveStatus"></p>
               </div>
             </article>
           </section>

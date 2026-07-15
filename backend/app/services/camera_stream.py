@@ -16,6 +16,15 @@ from app.modules.cameras.model import Camera
 from app.modules.plates.model import PlateRead
 from app.services.plate_recognizer import PlateDetection, PlateRecognizer, normalize_plate
 
+# OPENCV_FFMPEG_CAPTURE_OPTIONS là env var DÙNG CHUNG cho toàn process (mọi camera worker
+# thread đều đọc/ghi cùng 1 biến này) - nếu không khoá, 2 camera khác loại nguồn (1 RTSP +
+# 1 HTTP/MJPEG) mở gần như đồng thời có thể đọc nhầm giá trị của nhau (race condition).
+# Đã tự phát hiện + verify: nếu 1 camera RTSP mở trước đó set rtsp_transport;tcp vào biến
+# này, rồi 1 camera HTTP mở SAU (cùng process) mà không dọn lại biến -> HTTP capture vẫn
+# isOpened()=True nhưng read()/retrieve() luôn fail (option rtsp_transport không hợp lệ
+# với protocol HTTP) - lỗi thầm lặng, không exception, rất khó nhận ra nếu không test kỹ.
+_capture_open_lock = threading.Lock()
+
 
 @dataclass
 class StreamConfig:
@@ -90,29 +99,56 @@ class CameraWorker:
     def _open_capture(self):
         settings = get_settings()
         source = self.source_url
-        if source.startswith('rtsp://'):
-            # rtsp_transport là AVOption của FFmpeg, KHÔNG phải query string của URL -
-            # gắn "?rtsp_transport=tcp" vào URL (cách cũ) bị FFmpeg's RTSP demuxer bỏ
-            # qua hoàn toàn, nên transport thực tế luôn rơi về UDP mặc định (dù đặt
-            # STREAM_RTSP_TRANSPORT=tcp). Phải đi qua OPENCV_FFMPEG_CAPTURE_OPTIONS.
-            # UDP qua NAT của Docker Desktop (WSL2/Hyper-V) trên Windows bị timeout sau
-            # ~30s (conntrack UDP) -> luồng đứng hình, chỉ TCP mới ổn định trong container.
-            transport = settings.stream_rtsp_transport.strip().lower() or "tcp"
-            ffmpeg_opts = (settings.stream_ffmpeg_capture_options or "").strip()
-            combined_opts = f"rtsp_transport;{transport}"
-            if ffmpeg_opts:
-                combined_opts = f"{combined_opts}|{ffmpeg_opts}"
-            # OpenCV/FFmpeg backend reads this env var when opening VideoCapture.
-            os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = combined_opts
-        cap = cv2.VideoCapture(source, cv2.CAP_FFMPEG)
-        # Buffer 1 frame only: always read the freshest frame → minimal latency.
-        cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
-        cap.set(cv2.CAP_PROP_FPS, self._config.target_fps)
-        # Best-effort timeouts for unstable RTSP links (ignored by some backends).
-        if hasattr(cv2, "CAP_PROP_OPEN_TIMEOUT_MSEC"):
-            cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)
-        if hasattr(cv2, "CAP_PROP_READ_TIMEOUT_MSEC"):
-            cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 3000)
+        # Set/dọn env var RỒI mở capture trong CÙNG 1 lần giữ khoá - bắt buộc phải atomic
+        # với nhau, vì 2 worker thread (ví dụ 1 camera RTSP đang retry liên tục + 1 camera
+        # HTTP khác đang mở lại) có thể tranh nhau đọc/ghi env var process-wide này ở tần
+        # suất rất cao (mỗi lần reconnect) - đã tự verify: nhả khoá TRƯỚC VideoCapture(...)
+        # để giảm thời gian giữ khoá tưởng an toàn, nhưng thực tế 2 luồng cùng retry nhanh
+        # y hệt nhau vẫn trúng khe hở đó gần như mọi lần, làm 1 bên luôn đọc nhầm option
+        # của bên kia (isOpened=True nhưng read() luôn fail, không lỗi rõ ràng).
+        #
+        # Để giữ khoá an toàn qua cả open() mà KHÔNG treo cả cụm khi 1 camera mất kết nối
+        # im lặng (không phải "connection refused" mà không phản hồi gì - có thể treo hàng
+        # chục giây): dùng constructor rỗng + set CAP_PROP_OPEN_TIMEOUT_MSEC TRƯỚC khi gọi
+        # .open(), không phải sau như code cũ. cv2.VideoCapture(source, api) mở kết nối
+        # NGAY trong constructor (đồng bộ) nên set timeout SAU đó không kịp áp dụng cho
+        # lần mở đầu - đây là lý do timeout "5s" trước đây không thực sự có tác dụng.
+        with _capture_open_lock:
+            if source.startswith('rtsp://'):
+                # rtsp_transport là AVOption của FFmpeg, KHÔNG phải query string của URL -
+                # gắn "?rtsp_transport=tcp" vào URL (cách cũ) bị FFmpeg's RTSP demuxer bỏ
+                # qua hoàn toàn, nên transport thực tế luôn rơi về UDP mặc định (dù đặt
+                # STREAM_RTSP_TRANSPORT=tcp). Phải đi qua OPENCV_FFMPEG_CAPTURE_OPTIONS.
+                # UDP qua NAT của Docker Desktop (WSL2/Hyper-V) trên Windows bị timeout sau
+                # ~30s (conntrack UDP) -> luồng đứng hình, chỉ TCP mới ổn định trong container.
+                transport = settings.stream_rtsp_transport.strip().lower() or "tcp"
+                ffmpeg_opts = (settings.stream_ffmpeg_capture_options or "").strip()
+                combined_opts = f"rtsp_transport;{transport}"
+                if ffmpeg_opts:
+                    combined_opts = f"{combined_opts}|{ffmpeg_opts}"
+                # OpenCV/FFmpeg backend reads this env var when opening VideoCapture.
+                os.environ["OPENCV_FFMPEG_CAPTURE_OPTIONS"] = combined_opts
+            else:
+                # QUAN TRỌNG: nếu không dọn, giá trị rtsp_transport còn sót lại từ lần mở
+                # camera RTSP trước đó (biến process-wide) sẽ áp nhầm vào nguồn HTTP/MJPEG
+                # này -> isOpened()=True nhưng read()/retrieve() luôn fail âm thầm, không
+                # exception. Đã tự verify được lỗi này bằng cách tái hiện chính xác kịch
+                # bản: mở 1 rtsp:// (dù connect fail) rồi mở tiếp http:// trong cùng
+                # process -> http bị hỏng cho tới khi biến này được dọn sạch.
+                os.environ.pop("OPENCV_FFMPEG_CAPTURE_OPTIONS", None)
+
+            cap = cv2.VideoCapture()
+            # Buffer 1 frame only: always read the freshest frame → minimal latency.
+            cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+            cap.set(cv2.CAP_PROP_FPS, self._config.target_fps)
+            # Set TRƯỚC khi open() để thực sự chặn được lần mở đầu (không phải best-effort
+            # như code cũ) - đảm bảo open() không giữ khoá quá ~5s dù camera mất kết nối
+            # im lặng, để các camera khác không bị treo theo dù đang chờ chung khoá.
+            if hasattr(cv2, "CAP_PROP_OPEN_TIMEOUT_MSEC"):
+                cap.set(cv2.CAP_PROP_OPEN_TIMEOUT_MSEC, 5000)
+            if hasattr(cv2, "CAP_PROP_READ_TIMEOUT_MSEC"):
+                cap.set(cv2.CAP_PROP_READ_TIMEOUT_MSEC, 3000)
+            cap.open(source, cv2.CAP_FFMPEG)
         return cap
 
     def _resize_if_needed(self, frame):

@@ -1,5 +1,5 @@
-// Trang AI Center: upload model, test camera, danh sách model.
-import { api } from '../api.js';
+// Trang AI Center: upload model, test camera trực tiếp (live), danh sách model.
+import { api, wsCameraUrl } from '../api.js';
 import { appState } from '../state.js';
 import { els } from '../dom.js';
 import { notify } from '../ui.js';
@@ -29,7 +29,6 @@ export function renderAiCameraOptions() {
 export async function refreshAiStatus() {
   try {
     const data = await api('/api/v1/ai/status');
-    els.aiStatusText.textContent = `Recognizer: ${data.recognizer_name} | Models dir: ${data.models_dir}`;
     els.aiModelsList.innerHTML = '';
     if (!data.uploaded_models.length) {
       const li = document.createElement('li');
@@ -51,6 +50,156 @@ export async function refreshAiStatus() {
   }
 }
 
+// ---- Test camera AI trực tiếp: chọn camera -> Bắt đầu -> vẽ box + biển số nhận diện
+// liên tục lên đúng video đang stream, tới khi bấm Dừng hoặc rời khỏi trang AI. Chỉ
+// chạy khi người dùng chủ động bắt đầu - không tự chạy nền khi chưa ai bấm Start.
+const liveState = {
+  ws: null,
+  pollTimer: null,
+  detections: [],
+  pendingFrame: null,
+  decoding: false,
+  animFrame: null,
+};
+
+function drawLiveOverlay(bitmap) {
+  const canvas = els.aiLiveCanvas;
+  if (canvas.width !== bitmap.width || canvas.height !== bitmap.height) {
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+  }
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(bitmap, 0, 0);
+
+  for (const det of liveState.detections) {
+    if (!det.box) continue;
+    const [x1, y1, x2, y2] = det.box;
+    ctx.strokeStyle = '#22d3ee';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
+
+    const label = det.confidence != null ? `${det.plate} (${Math.round(det.confidence * 100)}%)` : det.plate;
+    ctx.font = '16px sans-serif';
+    const textWidth = ctx.measureText(label).width;
+    const labelTop = y1 - 20 > 0 ? y1 - 20 : y2 + 2;
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
+    ctx.fillRect(x1, labelTop, textWidth + 8, 18);
+    ctx.fillStyle = '#22d3ee';
+    ctx.fillText(label, x1 + 4, labelTop + 14);
+  }
+}
+
+function consumeLiveFrame() {
+  if (liveState.decoding) return;
+  liveState.decoding = true;
+  const frame = liveState.pendingFrame;
+  liveState.pendingFrame = null;
+  if (!frame) {
+    liveState.decoding = false;
+    return;
+  }
+  const blob = new Blob([frame], { type: 'image/jpeg' });
+  createImageBitmap(blob)
+    .then((bitmap) => {
+      drawLiveOverlay(bitmap);
+      bitmap.close();
+    })
+    .catch(() => {})
+    .finally(() => {
+      liveState.decoding = false;
+      if (liveState.pendingFrame) {
+        if (liveState.animFrame) cancelAnimationFrame(liveState.animFrame);
+        liveState.animFrame = requestAnimationFrame(consumeLiveFrame);
+      }
+    });
+}
+
+async function pollLiveDetections(cameraId) {
+  try {
+    const result = await api('/api/v1/ai/test-camera', {
+      method: 'POST',
+      body: JSON.stringify({ camera_id: cameraId }),
+    });
+    liveState.detections = result.detections || [];
+    if (!result.frame_available) {
+      els.aiLiveStatus.textContent = 'Đang chạy - camera chưa có frame để nhận diện';
+    } else if (!liveState.detections.length) {
+      els.aiLiveStatus.textContent = 'Đang chạy - chưa phát hiện biển số nào';
+    } else {
+      const plates = liveState.detections.map((d) => d.plate).join(', ');
+      els.aiLiveStatus.textContent = `Đang chạy - phát hiện: ${plates}`;
+    }
+  } catch (err) {
+    els.aiLiveStatus.textContent = `Lỗi test AI: ${err.message}`;
+  }
+}
+
+function setLiveControlsRunning(running) {
+  els.aiLiveStartBtn.disabled = running;
+  els.aiLiveStopBtn.disabled = !running;
+  els.aiCameraSelect.disabled = running;
+  els.aiLiveCanvas.style.display = running ? 'block' : 'none';
+  els.aiLivePlaceholder.style.display = running ? 'none' : 'block';
+}
+
+export function startAiLiveTest() {
+  if (liveState.ws) return;
+  const cameraId = Number(els.aiCameraSelect.value || 0);
+  if (!cameraId) {
+    notify('Chọn camera trước khi bắt đầu', 'warn');
+    return;
+  }
+
+  liveState.detections = [];
+  setLiveControlsRunning(true);
+  els.aiLiveStatus.textContent = 'Đang kết nối camera...';
+
+  const ws = new WebSocket(wsCameraUrl(cameraId));
+  ws.binaryType = 'arraybuffer';
+  ws.onmessage = (ev) => {
+    liveState.pendingFrame = ev.data;
+    consumeLiveFrame();
+  };
+  ws.onclose = () => {
+    if (liveState.ws === ws) {
+      els.aiLiveStatus.textContent = 'Mất kết nối video camera';
+    }
+  };
+  ws.onerror = () => {};
+  liveState.ws = ws;
+
+  pollLiveDetections(cameraId);
+  liveState.pollTimer = setInterval(() => pollLiveDetections(cameraId), 800);
+}
+
+export function stopAiLiveTest() {
+  if (liveState.pollTimer) {
+    clearInterval(liveState.pollTimer);
+    liveState.pollTimer = null;
+  }
+  if (liveState.ws) {
+    liveState.ws.onmessage = null;
+    liveState.ws.onclose = null;
+    liveState.ws.onerror = null;
+    liveState.ws.close();
+    liveState.ws = null;
+  }
+  if (liveState.animFrame) {
+    cancelAnimationFrame(liveState.animFrame);
+    liveState.animFrame = null;
+  }
+  liveState.pendingFrame = null;
+  liveState.decoding = false;
+  liveState.detections = [];
+
+  if (els.aiLiveCanvas) {
+    const ctx = els.aiLiveCanvas.getContext('2d');
+    ctx.clearRect(0, 0, els.aiLiveCanvas.width, els.aiLiveCanvas.height);
+  }
+  if (els.aiLiveStatus) els.aiLiveStatus.textContent = '';
+  setLiveControlsRunning(false);
+}
+
 export function initAi() {
   els.aiUploadForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
@@ -68,24 +217,6 @@ export function initAi() {
     }
   });
 
-  els.aiTestForm.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    const cameraId = Number(els.aiCameraSelect.value || 0);
-    if (!cameraId) {
-      notify('Chọn camera trước khi test AI', 'warn');
-      return;
-    }
-    try {
-      const result = await api('/api/v1/ai/test-camera', {
-        method: 'POST',
-        body: JSON.stringify({ camera_id: cameraId })
-      });
-      els.aiTestResult.textContent = JSON.stringify(result, null, 2);
-      if (!result.frame_available) notify('Camera chưa có frame để test', 'warn');
-      else notify(`AI test xong. Số detection: ${result.detections.length}`, 'success');
-    } catch (err) {
-      notify(`AI test lỗi: ${err.message}`, 'error');
-      els.aiTestResult.textContent = `Lỗi: ${err.message}`;
-    }
-  });
+  els.aiLiveStartBtn.addEventListener('click', startAiLiveTest);
+  els.aiLiveStopBtn.addEventListener('click', stopAiLiveTest);
 }

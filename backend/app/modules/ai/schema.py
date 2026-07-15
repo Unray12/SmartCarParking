@@ -24,6 +24,9 @@ class AiTestRequest(BaseModel):
 class AiDetectionOut(BaseModel):
     plate: str
     confidence: float | None
+    # (x1, y1, x2, y2) trên đúng frame đang stream qua WS cùng camera_id - FE vẽ box lên
+    # canvas không cần quy đổi toạ độ (test-camera dùng chung get_latest_frame với WS).
+    box: tuple[int, int, int, int] | None = None
 
 
 class AiTestResultOut(BaseModel):

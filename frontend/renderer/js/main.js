@@ -77,6 +77,8 @@ function switchView(viewName) {
   }
   if (viewName === 'ai') {
     ai.refreshAiStatus().catch((err) => notify(`AI status lỗi: ${err.message}`, 'warn'));
+  } else {
+    ai.stopAiLiveTest();
   }
   if (viewName === 'rfid') {
     rfid.loadRfidCards().catch((err) => notify(`RFID cards lỗi: ${err.message}`, 'warn'));

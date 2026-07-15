@@ -1,0 +1,30 @@
+/* ============================ Modal / login ============================ */
+.modal, .login-gate { position: fixed; inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(3, 8, 13, 0.82); backdrop-filter: blur(3px); overflow-y: auto; }
+.modal { z-index: 2000; }
+.login-gate { z-index: 2500; background: rgba(3, 8, 13, 0.9); }
+.modal.is-hidden, .login-gate.is-hidden { display: none; }
+.modal-card { width: min(560px, 100%); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; box-shadow: var(--shadow); }
+.modal-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.login-card { width: min(420px, 100%); border: 1px solid var(--line); border-radius: var(--radius); background: linear-gradient(180deg, var(--surface), var(--surface-2)); padding: 22px; display: grid; gap: 13px; box-shadow: var(--shadow); }
+.login-card h3 { margin: 0; font-size: 1.15rem; }
+.login-card p { margin: 0; }
+.login-error { min-height: 20px; color: #ff9db0; font-size: 0.85rem; }
+
+.sidebar-overlay { display: none; position: fixed; inset: 0; border: 0; background: rgba(3, 9, 15, 0.5); z-index: 1100; }
+
+/* ============================ Trang đăng nhập riêng ============================ */
+.auth-page {
+  min-height: 100vh; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 18px; padding: 24px;
+}
+.auth-brand { display: flex; align-items: center; gap: 12px; }
+.auth-brand h1 { margin: 0; font-size: 1.2rem; letter-spacing: 0.2px; }
+.auth-brand p { margin: 2px 0 0; color: var(--muted); font-size: 0.78rem; }
+.auth-page .login-card { width: min(400px, 100%); }
+.login-ok { min-height: 18px; color: #8ff0dd; font-size: 0.85rem; }
+.link-btn {
+  background: none; border: none; box-shadow: none; color: var(--accent-2);
+  font-weight: 600; cursor: pointer; padding: 4px; min-height: auto;
+  justify-self: center; font-size: 0.88rem;
+}
+.link-btn:hover { filter: none; text-decoration: underline; color: var(--accent); }

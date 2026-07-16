@@ -35,6 +35,8 @@ class StreamConfig:
     infer_every_n_frames: int = 6
     plate_dedupe_seconds: int = 8
     enable_inference: bool = True
+    # Xem comment ở core/config.py:Settings.stream_periodic_reconnect_seconds.
+    periodic_reconnect_seconds: int = 1800
 
 
 class CameraWorker:
@@ -165,6 +167,7 @@ class CameraWorker:
         frame_counter = 0
         read_failures = 0
         reconnect_backoff = 0.15
+        cap_opened_at = 0.0
 
         while self._running.is_set():
             loop_started = time.time()
@@ -180,6 +183,19 @@ class CameraWorker:
                 # Reset backoff on successful open.
                 reconnect_backoff = 0.15
                 read_failures = 0
+                cap_opened_at = loop_started
+
+            # Reconnect chủ động định kỳ dù stream đang khỏe (không có read_failures) -
+            # xem comment ở StreamConfig.periodic_reconnect_seconds. Mở lại tạo phiên
+            # RTSP/HTTP MỚI bắt đầu từ "hiện tại", xóa sạch mọi backlog đã tích lũy âm
+            # thầm trong buffer FFmpeg/OS - việc mà chỉ chờ lỗi mới reconnect không làm
+            # được (stream vẫn "sống" nên không bao giờ tự trigger nhánh trên).
+            reconnect_after = self._config.periodic_reconnect_seconds
+            if reconnect_after > 0 and (loop_started - cap_opened_at) >= reconnect_after:
+                cap.release()
+                cap = None
+                print(f"[CAMERA {self.camera_id}] Periodic reconnect after {reconnect_after}s (chống trễ tích lũy)")
+                continue
 
             if not cap.grab():
                 read_failures += 1

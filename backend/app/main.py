@@ -63,6 +63,7 @@ async def lifespan(app: FastAPI):
         infer_every_n_frames=settings.stream_infer_every_n_frames,
         plate_dedupe_seconds=settings.stream_plate_dedupe_seconds,
         enable_inference=settings.stream_enable_inference,
+        periodic_reconnect_seconds=settings.stream_periodic_reconnect_seconds,
     )
 
     camera_manager = CameraStreamManager(

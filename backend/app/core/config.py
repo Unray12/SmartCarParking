@@ -56,6 +56,16 @@ class Settings(BaseSettings):
     stream_infer_every_n_frames: int = 0
     stream_enable_inference: bool = False
     stream_plate_dedupe_seconds: int = 8
+    # Chủ động đóng+mở lại kết nối camera định kỳ dù stream vẫn "khỏe" (không lỗi). Lý
+    # do: cv2.VideoCapture.grab()/retrieve() đọc frame TUẦN TỰ từ buffer nội bộ của
+    # FFmpeg/OS - khác với các hàng "latest-wins" nội bộ app (encode/WS/frontend). Nếu
+    # tốc độ vòng capture dù chỉ tạm thời chậm hơn tốc độ camera đẩy frame (CPU bận do
+    # nhiều camera, GC, decode chậm...), một backlog thật hình thành trong buffer đó và
+    # KHÔNG tự co lại (capture_skip_grabs mặc định tắt) - chỉ một kết nối MỚI (session
+    # RTSP mới bắt đầu từ "hiện tại") mới xóa sạch được độ trễ đã tích lũy. Trước đây
+    # reconnect chỉ xảy ra khi grab()/retrieve() thất bại thật sự - một stream "vẫn sống
+    # nhưng đang trễ dần" không bao giờ tự trigger việc này. 0 = tắt cơ chế này.
+    stream_periodic_reconnect_seconds: int = 1800
     ai_models_dir: str = "models_store"
     snapshot_store_dir: str = "snapshots_store"
 

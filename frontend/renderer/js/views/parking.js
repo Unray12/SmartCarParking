@@ -25,6 +25,9 @@ const captureStatusTimers = { entry: null, exit: null };
 // luồng polling định kỳ của trang.
 const lastCapturePulseKeys = { entry: null, exit: null };
 const lastRejectedPulseKeys = { entry: null, exit: null };
+// Bãi đang được coi là "đã thiết lập baseline" cho cảnh báo quẹt bị từ chối - xem
+// renderRejectedRfidStatus. null = chưa thiết lập cho bất kỳ bãi nào (lần đầu mở app).
+let rejectedBaselineLotId = null;
 
 const hooks = { onLotsLoaded: null };
 
@@ -447,11 +450,15 @@ const REJECTED_RFID_MESSAGES = {
   not_found: 'Chưa quẹt vào - không tìm thấy phiên gửi',
 };
 
+function rejectedPulseKey(event) {
+  return `warn:${event.card_id}:${event.direction}:${event.received_at}`;
+}
+
 function pulseRejectedStatus(event) {
   const kind = event.direction === 'in' ? 'entry' : 'exit';
   const target = kind === 'entry' ? els.lotEntryCaptureStatus : els.lotExitCaptureStatus;
   const label = kind === 'entry' ? 'RFID vào' : 'RFID ra';
-  const pulseKey = `warn:${event.card_id}:${event.direction}:${event.received_at}`;
+  const pulseKey = rejectedPulseKey(event);
   if (lastRejectedPulseKeys[kind] === pulseKey) return;
   lastRejectedPulseKeys[kind] = pulseKey;
   const reason = REJECTED_RFID_MESSAGES[event.result_status] || event.result_status;
@@ -465,16 +472,30 @@ function pulseRejectedStatus(event) {
   }, 3000);
 }
 
-function renderRejectedRfidStatus(events) {
+// API trả "N sự kiện bị từ chối GẦN NHẤT của bãi" - KHÔNG có khái niệm "mới phát sinh từ
+// lúc mở trang" hay chưa, nên lần poll ĐẦU TIÊN sau khi mở/đổi bãi có thể thấy 1 sự kiện
+// đã xảy ra từ RẤT LÂU (vd lúc test tính năng) và hiểu nhầm là "vừa xảy ra" rồi bắn cảnh
+// báo sai lệch cho lượt quẹt hiện tại (đã tự phát hiện: y hệt pattern `hasSyncedInitialLogs`
+// đã dùng ở rfid.js). Sửa bằng cách "thiết lập baseline" lặng lẽ (không pulse) ở lần poll
+// đầu tiên cho MỖI bãi mới mở - chỉ coi là "mới" và pulse cảnh báo từ lần poll thứ 2 trở đi.
+function renderRejectedRfidStatus(events, lotId) {
+  const isFirstLoadForLot = rejectedBaselineLotId !== lotId;
+  if (isFirstLoadForLot) rejectedBaselineLotId = lotId;
+
   if (!events || !events.length) return;
-  // Backend đã sort desc theo received_at nên trong mỗi hướng, phần tử đầu tiên gặp
-  // được là mới nhất. QUAN TRỌNG: phải tìm mới nhất RIÊNG cho từng hướng (in/out) rồi
-  // pulse CẢ HAI nếu có - không được chỉ lấy events[0] (mới nhất chung của cả 2 hướng),
-  // vì nếu 1 lượt "already_in" (hướng vào) và 1 lượt "not_found" (hướng ra) xảy ra sát
-  // nhau, events[0] chỉ là 1 trong 2 - lượt còn lại (dù cũng vừa xảy ra) sẽ bị bỏ qua
-  // hoàn toàn, không bao giờ hiện cảnh báo ở chip của nó (đã tự phát hiện bug này).
   const latestIn = events.find((e) => e.direction === 'in');
   const latestOut = events.find((e) => e.direction === 'out');
+
+  if (isFirstLoadForLot) {
+    if (latestIn) lastRejectedPulseKeys.entry = rejectedPulseKey(latestIn);
+    if (latestOut) lastRejectedPulseKeys.exit = rejectedPulseKey(latestOut);
+    return;
+  }
+
+  // QUAN TRỌNG: phải tìm mới nhất RIÊNG cho từng hướng (in/out) rồi pulse CẢ HAI nếu có
+  // - không được chỉ lấy events[0] (mới nhất chung của cả 2 hướng), vì nếu 1 lượt
+  // "already_in" (hướng vào) và 1 lượt "not_found" (hướng ra) xảy ra sát nhau, events[0]
+  // chỉ là 1 trong 2 - lượt còn lại (dù cũng vừa xảy ra) sẽ bị bỏ qua hoàn toàn.
   if (latestIn) pulseRejectedStatus(latestIn);
   if (latestOut) pulseRejectedStatus(latestOut);
 }
@@ -486,6 +507,7 @@ function setCaptureStatusIdle() {
   lastCapturePulseKeys.exit = null;
   lastRejectedPulseKeys.entry = null;
   lastRejectedPulseKeys.exit = null;
+  rejectedBaselineLotId = null;
   setCaptureStatusChip(els.lotEntryCaptureStatus, 'off', 'RFID vào');
   setCaptureStatusChip(els.lotExitCaptureStatus, 'off', 'RFID ra');
 }
@@ -540,7 +562,7 @@ export async function openParkingLotDetail(lotId) {
   els.lotDetailAiToggle.checked = Boolean(data.lot.ai_enabled);
   renderLotDetailLogs(data.sessions || []);
   renderLotLatestCaptures(data.snapshots || []);
-  renderRejectedRfidStatus(data.rejected_events || []);
+  renderRejectedRfidStatus(data.rejected_events || [], lotId);
   ensureLotStreams(data.lot);
 }
 

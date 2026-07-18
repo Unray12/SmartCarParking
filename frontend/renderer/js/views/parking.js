@@ -490,37 +490,43 @@ function setCaptureStatusIdle() {
   setCaptureStatusChip(els.lotExitCaptureStatus, 'off', 'RFID ra');
 }
 
+// Ô "capture vào" và ô "capture ra" ĐỘC LẬP hoàn toàn với nhau - mỗi ô tự tìm ảnh mới
+// nhất của ĐÚNG hướng của nó, không còn phụ thuộc "sự kiện mới nhất chung" như trước
+// (trước đây nếu sự kiện mới nhất là OUT, ô "capture vào" bị ghi đè để hiện tạm ảnh vào
+// của phiên đó - gây hiểu nhầm là 2 ô liên quan tới nhau). Ô "capture ra" chia đôi: nửa
+// trái hiện lại ảnh VÀO của ĐÚNG phiên vừa ra (để đối chiếu), nửa phải hiện ảnh chụp
+// thật lúc quẹt ra.
 function renderLotLatestCaptures(snapshots) {
   if (!snapshots || !snapshots.length) {
     els.lotEntryCaptureImg.src = '';
+    els.lotExitCaptureRefImg.src = '';
     els.lotExitCaptureImg.src = '';
     setCaptureStatusIdle();
     return;
   }
 
   const ordered = [...snapshots].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-  const latest = ordered[0];
 
-  if (latest.direction === 'in') {
-    els.lotEntryCaptureImg.src = latest.image_url ? absoluteApiUrlNoCache(latest.image_url) : '';
-    els.lotExitCaptureImg.src = '';
-    pulseCaptureStatus('entry', Boolean(latest.image_url), latest);
-    setCaptureStatusChip(els.lotExitCaptureStatus, 'off', 'RFID ra');
-    return;
-  }
-
-  if (latest.direction === 'out') {
-    const pairedIn = ordered.find((x) => x.direction === 'in' && x.session_id === latest.session_id);
-    els.lotEntryCaptureImg.src = pairedIn?.image_url ? absoluteApiUrlNoCache(pairedIn.image_url) : '';
-    els.lotExitCaptureImg.src = latest.image_url ? absoluteApiUrlNoCache(latest.image_url) : '';
+  const latestIn = ordered.find((x) => x.direction === 'in');
+  if (latestIn) {
+    els.lotEntryCaptureImg.src = latestIn.image_url ? absoluteApiUrlNoCache(latestIn.image_url) : '';
+    pulseCaptureStatus('entry', Boolean(latestIn.image_url), latestIn);
+  } else {
+    els.lotEntryCaptureImg.src = '';
     setCaptureStatusChip(els.lotEntryCaptureStatus, 'off', 'RFID vào');
-    pulseCaptureStatus('exit', Boolean(latest.image_url), latest);
-    return;
   }
 
-  els.lotEntryCaptureImg.src = '';
-  els.lotExitCaptureImg.src = '';
-  setCaptureStatusIdle();
+  const latestOut = ordered.find((x) => x.direction === 'out');
+  if (latestOut) {
+    const pairedIn = ordered.find((x) => x.direction === 'in' && x.session_id === latestOut.session_id);
+    els.lotExitCaptureRefImg.src = pairedIn?.image_url ? absoluteApiUrlNoCache(pairedIn.image_url) : '';
+    els.lotExitCaptureImg.src = latestOut.image_url ? absoluteApiUrlNoCache(latestOut.image_url) : '';
+    pulseCaptureStatus('exit', Boolean(latestOut.image_url), latestOut);
+  } else {
+    els.lotExitCaptureRefImg.src = '';
+    els.lotExitCaptureImg.src = '';
+    setCaptureStatusChip(els.lotExitCaptureStatus, 'off', 'RFID ra');
+  }
 }
 
 export async function openParkingLotDetail(lotId) {
@@ -611,6 +617,7 @@ export function initParking(opts = {}) {
     els.lotDetailAiToggle.disabled = true;
     els.lotDetailLogBody.innerHTML = '<tr><td colspan="6" class="empty">Chưa có dữ liệu</td></tr>';
     els.lotEntryCaptureImg.src = '';
+    els.lotExitCaptureRefImg.src = '';
     els.lotExitCaptureImg.src = '';
     setCaptureStatusIdle();
     setLotPlaceholder('entry', 'Chưa có camera vào');

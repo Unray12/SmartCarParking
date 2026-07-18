@@ -111,6 +111,7 @@ export const els = {
   lotExitCanvas: document.getElementById('lotExitCanvas'),
   lotExitPlaceholder: document.getElementById('lotExitPlaceholder'),
   lotEntryCaptureImg: document.getElementById('lotEntryCaptureImg'),
+  lotExitCaptureRefImg: document.getElementById('lotExitCaptureRefImg'),
   lotExitCaptureImg: document.getElementById('lotExitCaptureImg'),
   lotEntryCaptureStatus: document.getElementById('lotEntryCaptureStatus'),
   lotExitCaptureStatus: document.getElementById('lotExitCaptureStatus'),

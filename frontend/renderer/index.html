@@ -325,7 +325,16 @@
               <article class="panel sub">
                 <div class="panel-head"><h3>Ảnh capture ra mới nhất</h3></div>
                 <div class="panel-content">
-                  <img id="lotExitCaptureImg" alt="exit capture" class="capture-img" />
+                  <div class="capture-compare">
+                    <div class="capture-compare-half">
+                      <span class="capture-compare-label">Lúc vào (đối chiếu)</span>
+                      <img id="lotExitCaptureRefImg" alt="entry reference capture" class="capture-img" />
+                    </div>
+                    <div class="capture-compare-half">
+                      <span class="capture-compare-label">Lúc ra</span>
+                      <img id="lotExitCaptureImg" alt="exit capture" class="capture-img" />
+                    </div>
+                  </div>
                   <div class="capture-status-row">
                     <span class="capture-status is-off" id="lotExitCaptureStatus">RFID ra: đang không quét</span>
                   </div>

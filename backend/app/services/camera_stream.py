@@ -98,6 +98,15 @@ class CameraWorker:
         with self._lock:
             return self._latest_jpeg, self._latest_ts, self._latest_seq
 
+    def latest_frame_bgr(self) -> np.ndarray | None:
+        # Trả thẳng frame BGR thô mới nhất (nguồn của _encode_loop) - dùng cho AI test-camera
+        # để khỏi phải giải mã lại JPEG (vốn vừa được encode TỪ chính frame này) chỉ để lấy
+        # lại mảng BGR, tốn CPU vô ích trên máy yếu (NUC) và cộng dồn thêm độ trễ mỗi lần poll.
+        with self._frame_lock:
+            if self._latest_frame_bgr is None:
+                return None
+            return self._latest_frame_bgr.copy()
+
     def _open_capture(self):
         settings = get_settings()
         source = self.source_url
@@ -384,12 +393,12 @@ class CameraStreamManager:
         return worker.latest_packet()
 
     def test_camera_ai(self, camera_id: int) -> tuple[bool, list[PlateDetection], np.ndarray | None]:
-        frame_bytes, _ = self.get_latest_frame(camera_id)
-        if not frame_bytes:
+        with self._workers_lock:
+            worker = self._workers.get(camera_id)
+        if not worker:
             return False, [], None
 
-        frame_np = np.frombuffer(frame_bytes, dtype=np.uint8)
-        frame_bgr = cv2.imdecode(frame_np, cv2.IMREAD_COLOR)
+        frame_bgr = worker.latest_frame_bgr()
         if frame_bgr is None:
             return False, [], None
 

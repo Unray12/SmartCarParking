@@ -56,11 +56,16 @@ export async function refreshAiStatus() {
 const liveState = {
   ws: null,
   pollTimer: null,
+  polling: false,
   detections: [],
   pendingFrame: null,
   decoding: false,
   animFrame: null,
 };
+
+// Khoảng nghỉ giữa lúc 1 lần gọi AI test-camera XONG và lần kế tiếp bắt đầu - không
+// phải khoảng cố định giữa 2 lần BẮT ĐẦU (xem pollLoop bên dưới).
+const AI_POLL_INTERVAL_MS = 800;
 
 function drawLiveOverlay(bitmap) {
   const canvas = els.aiLiveCanvas;
@@ -134,6 +139,20 @@ async function pollLiveDetections(cameraId) {
   }
 }
 
+// Vòng lặp TỰ LÊN LỊCH (setTimeout sau khi lần trước XONG) thay vì setInterval (bắn cố
+// định mỗi 800ms bất kể lần trước đã xong chưa). Trên máy yếu (NUC), 1 lần inference
+// YOLO 2 giai đoạn có thể mất LÂU HƠN 800ms - setInterval cũ sẽ bắn thêm request MỚI
+// trong khi request TRƯỚC còn đang chạy, dồn nhiều lượt inference chạy chồng lấn cùng
+// lúc, càng làm CPU (vốn đã yếu) chậm thêm - vừa làm AI giật, vừa làm cả stream video
+// (chạy chung 1 CPU/process) giật theo. Vòng lặp mới tự thích ứng: máy càng chậm, phản
+// hồi càng lâu, khoảng nghỉ thực tế giữa 2 lần gọi càng dài ra - không bao giờ chồng lấn.
+async function pollLoop(cameraId) {
+  if (!liveState.polling) return;
+  await pollLiveDetections(cameraId);
+  if (!liveState.polling) return;
+  liveState.pollTimer = setTimeout(() => pollLoop(cameraId), AI_POLL_INTERVAL_MS);
+}
+
 function setLiveControlsRunning(running) {
   els.aiLiveStartBtn.disabled = running;
   els.aiLiveStopBtn.disabled = !running;
@@ -168,13 +187,14 @@ export function startAiLiveTest() {
   ws.onerror = () => {};
   liveState.ws = ws;
 
-  pollLiveDetections(cameraId);
-  liveState.pollTimer = setInterval(() => pollLiveDetections(cameraId), 800);
+  liveState.polling = true;
+  pollLoop(cameraId);
 }
 
 export function stopAiLiveTest() {
+  liveState.polling = false;
   if (liveState.pollTimer) {
-    clearInterval(liveState.pollTimer);
+    clearTimeout(liveState.pollTimer);
     liveState.pollTimer = null;
   }
   if (liveState.ws) {

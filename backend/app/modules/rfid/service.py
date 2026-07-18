@@ -313,11 +313,13 @@ def _handle_check_out(
     # dùng luôn biển đọc được lúc ra để điền vào session - tránh log/hiện thị bị null
     # trong khi AI đã nhận diện được biển số thật.
     ai_plate_match: bool | None = None
+    ai_exit_plate: str | None = None
     ai_box: tuple[int, int, int, int] | None = None
     ai_frame_bgr: np.ndarray | None = None
     if lot and lot.ai_enabled:
         ai_plate, _ai_conf, ai_box, ai_frame_bgr = _detect_plate_via_ai(camera_manager, exit_camera_id)
         if ai_plate:
+            ai_exit_plate = ai_plate
             if active_session.plate != NO_PLATE_SENTINEL:
                 ai_plate_match = ai_plate == active_session.plate
             else:
@@ -348,6 +350,7 @@ def _handle_check_out(
     active_session.duration_minutes = duration
     active_session.fee = fee
     active_session.ai_plate_match = ai_plate_match
+    active_session.ai_exit_plate = ai_exit_plate
     if exit_camera_id:
         active_session.exit_camera_id = exit_camera_id
     if exit_snapshot_path:
@@ -371,6 +374,7 @@ def _handle_check_out(
         currency=settings.parking_currency,
         duration_minutes=duration,
         ai_plate_match=ai_plate_match,
+        ai_exit_plate=ai_exit_plate,
     )
 
 

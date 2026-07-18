@@ -178,7 +178,7 @@ export function initRfid(opts = {}) {
       const aiText = result.ai_plate_match === true
         ? ' · AI: khớp biển số'
         : result.ai_plate_match === false
-          ? ' · AI: KHÔNG khớp biển số (xem lại)'
+          ? ` · AI: KHÔNG khớp biển số${result.ai_exit_plate ? ` (AI đọc: ${result.ai_exit_plate})` : ''} (xem lại)`
           : '';
       const statusLabel = RFID_STATUS_LABELS[result.status] || result.status;
       const capText = result.snapshot_path ? ' và đã capture ảnh' : '';

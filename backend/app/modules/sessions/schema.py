@@ -20,6 +20,7 @@ class ParkingSessionOut(BaseModel):
     entry_snapshot_path: str | None
     exit_snapshot_path: str | None
     ai_plate_match: bool | None = None
+    ai_exit_plate: str | None = None
     # Computed
     duration_minutes: int = 0
     fee: int = 0

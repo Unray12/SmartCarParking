@@ -84,13 +84,13 @@ function drawLiveOverlay(bitmap) {
     ctx.strokeRect(x1, y1, x2 - x1, y2 - y1);
 
     const label = det.confidence != null ? `${det.plate} (${Math.round(det.confidence * 100)}%)` : det.plate;
-    ctx.font = '16px sans-serif';
+    ctx.font = 'bold 22px sans-serif';
     const textWidth = ctx.measureText(label).width;
-    const labelTop = y1 - 20 > 0 ? y1 - 20 : y2 + 2;
+    const labelTop = y1 - 28 > 0 ? y1 - 28 : y2 + 2;
     ctx.fillStyle = 'rgba(0, 0, 0, 0.65)';
-    ctx.fillRect(x1, labelTop, textWidth + 8, 18);
+    ctx.fillRect(x1, labelTop, textWidth + 10, 26);
     ctx.fillStyle = '#22d3ee';
-    ctx.fillText(label, x1 + 4, labelTop + 14);
+    ctx.fillText(label, x1 + 5, labelTop + 20);
   }
 }
 

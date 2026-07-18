@@ -54,6 +54,7 @@ def _ensure_runtime_schema() -> None:
             ("fee", "INTEGER"),
             ("duration_minutes", "INTEGER"),
             ("ai_plate_match", "BOOLEAN"),
+            ("ai_exit_plate", "VARCHAR(32)"),
         ]
         with engine.begin() as conn:
             for name, sql_type in additions:

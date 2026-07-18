@@ -225,6 +225,7 @@ def get_parking_lot_overview(db: Session, lot_id: int, limit: int = 100) -> Park
             entry_snapshot_path=s.entry_snapshot_path,
             exit_snapshot_path=s.exit_snapshot_path,
             ai_plate_match=s.ai_plate_match,
+            ai_exit_plate=s.ai_exit_plate,
         )
         for s in sessions
     ]

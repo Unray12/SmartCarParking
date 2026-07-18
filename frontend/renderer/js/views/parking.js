@@ -16,7 +16,15 @@ const lotDetailState = {
   streamSharedCamId: null
 };
 const captureStatusTimers = { entry: null, exit: null };
+// Dedup key riêng cho pulse "ok" (quẹt thành công) và pulse "warn" (quẹt bị từ chối) -
+// PHẢI tách riêng 2 dict này. Nếu dùng chung 1 dict theo `kind`, mỗi lần đổi qua lại
+// giữa 2 loại pulse (vd vừa có 1 lượt thành công cũ, giờ có 1 lượt bị từ chối) thì key
+// của loại này sẽ luôn khác key của loại kia (khác prefix "ok:"/"warn:") -> dedup coi
+// là "khác nhau" mỗi lần, khiến CẢ HAI hàm tự re-fire lẫn nhau ở MỌI lần poll tiếp theo
+// (không chỉ 1 lần khi thật sự có sự kiện mới) - đã tự phát hiện bug này khi trace lại
+// luồng polling định kỳ của trang.
 const lastCapturePulseKeys = { entry: null, exit: null };
+const lastRejectedPulseKeys = { entry: null, exit: null };
 
 const hooks = { onLotsLoaded: null };
 
@@ -356,7 +364,15 @@ function renderLotDetailLogs(sessions) {
   for (const s of sessions) {
     rows.push({ at: s.entry_time, direction: 'in', plate: s.plate || '-', card: s.rfid_card, status: 'checked_in', aiMatch: null });
     if (s.exit_time) {
-      rows.push({ at: s.exit_time, direction: 'out', plate: s.plate || '-', card: s.rfid_card, status: 'checked_out', aiMatch: s.ai_plate_match ?? null });
+      rows.push({
+        at: s.exit_time,
+        direction: 'out',
+        plate: s.plate || '-',
+        card: s.rfid_card,
+        status: 'checked_out',
+        aiMatch: s.ai_plate_match ?? null,
+        aiExitPlate: s.ai_exit_plate || null,
+      });
     }
   }
   rows.sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
@@ -371,7 +387,16 @@ function renderLotDetailLogs(sessions) {
     const tr = document.createElement('tr');
     const directionLabel = row.direction === 'in' ? 'IN' : 'OUT';
     const statusLabel = row.status === 'checked_in' ? 'Đang gửi' : 'Đã ra';
-    const aiLabel = row.aiMatch === null ? '-' : (row.aiMatch ? '<span class="lot-log-chip lot-log-chip-in">Khớp</span>' : '<span class="lot-log-chip lot-log-chip-out">Không khớp</span>');
+    // Khi mismatch, kèm luôn biển AI đọc được lúc RA - cột "Biển số" ở dòng vào/ra luôn
+    // hiển thị CÙNG 1 giá trị (biển chốt của session, không đổi trong suốt phiên) nên nếu
+    // không hiện kèm biển AI thực tế đọc lúc ra, người xem sẽ không hiểu vì sao lại "Không
+    // khớp" trong khi 2 dòng nhìn y hệt nhau.
+    const aiLabel =
+      row.aiMatch === null
+        ? '-'
+        : row.aiMatch
+        ? '<span class="lot-log-chip lot-log-chip-in">Khớp</span>'
+        : `<span class="lot-log-chip lot-log-chip-out">Không khớp</span>${row.aiExitPlate ? ` <span class="lot-log-ai-detected">(AI đọc: ${escapeHtml(row.aiExitPlate)})</span>` : ''}`;
     tr.className = `lot-log-row ${idx % 2 === 0 ? 'lot-log-even' : 'lot-log-odd'}`;
     tr.innerHTML = `
       <td>${fmtDate(row.at)}</td>
@@ -427,8 +452,8 @@ function pulseRejectedStatus(event) {
   const target = kind === 'entry' ? els.lotEntryCaptureStatus : els.lotExitCaptureStatus;
   const label = kind === 'entry' ? 'RFID vào' : 'RFID ra';
   const pulseKey = `warn:${event.card_id}:${event.direction}:${event.received_at}`;
-  if (lastCapturePulseKeys[kind] === pulseKey) return;
-  lastCapturePulseKeys[kind] = pulseKey;
+  if (lastRejectedPulseKeys[kind] === pulseKey) return;
+  lastRejectedPulseKeys[kind] = pulseKey;
   const reason = REJECTED_RFID_MESSAGES[event.result_status] || event.result_status;
   setCaptureStatusChip(target, 'warn', label, `${label}: ${reason} (thẻ ${event.card_id})`);
   if (captureStatusTimers[kind]) clearTimeout(captureStatusTimers[kind]);
@@ -442,8 +467,16 @@ function pulseRejectedStatus(event) {
 
 function renderRejectedRfidStatus(events) {
   if (!events || !events.length) return;
-  // Backend đã sort desc theo received_at - phần tử đầu là mới nhất.
-  pulseRejectedStatus(events[0]);
+  // Backend đã sort desc theo received_at nên trong mỗi hướng, phần tử đầu tiên gặp
+  // được là mới nhất. QUAN TRỌNG: phải tìm mới nhất RIÊNG cho từng hướng (in/out) rồi
+  // pulse CẢ HAI nếu có - không được chỉ lấy events[0] (mới nhất chung của cả 2 hướng),
+  // vì nếu 1 lượt "already_in" (hướng vào) và 1 lượt "not_found" (hướng ra) xảy ra sát
+  // nhau, events[0] chỉ là 1 trong 2 - lượt còn lại (dù cũng vừa xảy ra) sẽ bị bỏ qua
+  // hoàn toàn, không bao giờ hiện cảnh báo ở chip của nó (đã tự phát hiện bug này).
+  const latestIn = events.find((e) => e.direction === 'in');
+  const latestOut = events.find((e) => e.direction === 'out');
+  if (latestIn) pulseRejectedStatus(latestIn);
+  if (latestOut) pulseRejectedStatus(latestOut);
 }
 
 function setCaptureStatusIdle() {
@@ -451,6 +484,8 @@ function setCaptureStatusIdle() {
   if (captureStatusTimers.exit) { clearTimeout(captureStatusTimers.exit); captureStatusTimers.exit = null; }
   lastCapturePulseKeys.entry = null;
   lastCapturePulseKeys.exit = null;
+  lastRejectedPulseKeys.entry = null;
+  lastRejectedPulseKeys.exit = null;
   setCaptureStatusChip(els.lotEntryCaptureStatus, 'off', 'RFID vào');
   setCaptureStatusChip(els.lotExitCaptureStatus, 'off', 'RFID ra');
 }

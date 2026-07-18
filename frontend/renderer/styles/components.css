@@ -161,6 +161,7 @@ tbody tr:hover td { background: rgba(79, 134, 255, 0.07); }
 .lot-log-chip { display: inline-flex; align-items: center; justify-content: center; min-width: 56px; padding: 3px 10px; border-radius: 999px; font-size: 0.74rem; font-weight: 700; border: 1px solid transparent; }
 .lot-log-chip-in { background: rgba(45, 212, 191, 0.18); border-color: rgba(45, 212, 191, 0.45); color: #8ff0dd; }
 .lot-log-chip-out { background: rgba(248, 113, 113, 0.18); border-color: rgba(248, 113, 113, 0.45); color: #ffbcbc; }
+.lot-log-ai-detected { font-size: 0.74rem; color: #9aa4b2; white-space: nowrap; }
 
 /* ============================ Occupancy bars ============================ */
 .occ-row { display: grid; grid-template-columns: 11.25rem 1fr 6.875rem; align-items: center; gap: 0.75rem; padding: 0.5625rem 0; border-bottom: 1px solid var(--line-soft); }

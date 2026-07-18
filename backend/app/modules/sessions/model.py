@@ -32,3 +32,9 @@ class ParkingSession(Base):
     # kiểm tra (bãi không bật AI, hoặc AI không đọc được biển lúc ra), True/False = có kiểm tra.
     # KHÔNG chặn check-out dù mismatch - chỉ đánh dấu để xem lại (theo yêu cầu người dùng).
     ai_plate_match: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # Biển số AI đọc được THỰC TẾ lúc check-out (khác `plate` - vốn là biển CHỐT lúc vào,
+    # không đổi trong suốt phiên). Cột `plate` hiển thị GIỐNG NHAU ở cả dòng vào lẫn dòng ra
+    # trên UI (đúng vì đó là biển của session, không phải biển đọc được ở mỗi lượt quẹt) nên
+    # nếu ai_plate_match=False mà không lưu riêng giá trị này thì không có cách nào biết AI
+    # đã đọc thành CÁI GÌ khác để gây mismatch - lưu lại để hiển thị, phục vụ soát lại.
+    ai_exit_plate: Mapped[str | None] = mapped_column(String(32), nullable=True)

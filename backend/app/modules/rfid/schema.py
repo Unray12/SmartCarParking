@@ -28,6 +28,9 @@ class RfidEventResult(BaseModel):
     # Kết quả so khớp biển số AI lúc check-out (None = bãi không bật AI hoặc AI
     # không đọc được biển lúc ra). KHÔNG chặn checkout dù False - chỉ để cảnh báo.
     ai_plate_match: bool | None = None
+    # Biển AI đọc được thực tế lúc check-out (khác `plate` ở trên - đó là biển CHỐT của
+    # session, không đổi). Chỉ có giá trị khi `ai_plate_match` không None.
+    ai_exit_plate: str | None = None
     # Phí gửi xe khi check-out
     fee: int | None = None
     currency: str | None = None

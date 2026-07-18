@@ -45,14 +45,19 @@ class Settings(BaseSettings):
     stream_capture_skip_grabs: int = 0
     stream_ws_target_fps: int = 25
     stream_rtsp_transport: str = "tcp"
-    # max_delay thấp (100ms thay vì 500ms/1s mặc định phổ biến) để FFmpeg không giữ lại
-    # gói tin chờ ghép nối trước khi trả frame - đánh đổi lấy rủi ro giật hình nhẹ trên
-    # mạng kém ổn định. LƯU Ý: chỉ được liệt kê MỖI KEY 1 LẦN - OpenCV parse chuỗi này
+    # max_delay 10ms (giảm từ 100ms) để FFmpeg không giữ lại gói tin chờ ghép nối trước
+    # khi trả frame - đánh đổi lấy rủi ro giật hình nhẹ trên mạng kém ổn định. Đã tự
+    # verify bằng script độc lập trên 2 camera RTSP H.264 thật (CBR, đã tune GOP ngắn +
+    # 1 camera vẫn cấu hình cũ): cả 2 chạy sạch (0 grab/retrieve fail) xuống tới 1ms,
+    # chọn 10ms để chừa biên độ an toàn cho jitter mạng thực tế ngoài phòng test. Nếu
+    # sau này thấy giật/lỗi decode (đặc biệt trên mạng kém ổn định hơn), tăng dần lại
+    # (30000-100000) - đây là điểm cân bằng trễ/ổn định, không có giá trị đúng tuyệt đối
+    # cho mọi mạng. LƯU Ý: chỉ được liệt kê MỖI KEY 1 LẦN - OpenCV parse chuỗi này
     # thành av_dict rồi set từng option, key trùng sẽ bị GHI ĐÈ (không cộng dồn), nên
     # 2 flag của fflags phải gộp chung bằng dấu "+" (nobuffer+discardcorrupt) chứ không
     # tách thành 2 mục "fflags;..." riêng (mục sau sẽ xoá mất mục trước, "nobuffer" sẽ
     # coi như never được set - đây là bug thực tế từng có trong default cũ của biến này).
-    stream_ffmpeg_capture_options: str = "fflags;nobuffer+discardcorrupt|flags;low_delay|reorder_queue_size;0|max_delay;100000|allowed_media_types;video"
+    stream_ffmpeg_capture_options: str = "fflags;nobuffer+discardcorrupt|flags;low_delay|reorder_queue_size;0|max_delay;10000|allowed_media_types;video"
     stream_infer_every_n_frames: int = 0
     stream_enable_inference: bool = False
     stream_plate_dedupe_seconds: int = 8

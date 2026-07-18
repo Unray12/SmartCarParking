@@ -385,31 +385,65 @@ function renderLotDetailLogs(sessions) {
   }
 }
 
-function setCaptureStatusChip(el, ok, label) {
+// 3 trạng thái chip: 'ok' (xanh - quẹt thành công), 'off' (đỏ - đang không quét),
+// 'warn' (vàng - quẹt bị TỪ CHỐI: already_in/not_found, xem pulseRejectedStatus).
+function setCaptureStatusChip(el, state, label, message = null) {
   if (!el) return;
-  el.classList.remove('is-ok', 'is-off');
-  el.classList.add(ok ? 'is-ok' : 'is-off');
-  el.textContent = `${label}: ${ok ? 'quét RFID OK' : 'đang không quét'}`;
+  el.classList.remove('is-ok', 'is-off', 'is-warn');
+  el.classList.add(state === 'ok' ? 'is-ok' : state === 'warn' ? 'is-warn' : 'is-off');
+  el.textContent = message || `${label}: ${state === 'ok' ? 'quét RFID OK' : 'đang không quét'}`;
 }
 
 function pulseCaptureStatus(kind, ok, snapshot = null) {
   const target = kind === 'entry' ? els.lotEntryCaptureStatus : els.lotExitCaptureStatus;
   const label = kind === 'entry' ? 'RFID vào' : 'RFID ra';
   if (!ok) {
-    setCaptureStatusChip(target, false, label);
+    setCaptureStatusChip(target, 'off', label);
     return;
   }
   const pulseKey = snapshot
-    ? `${snapshot.session_id || '-'}:${snapshot.direction || '-'}:${snapshot.timestamp || '-'}:${snapshot.image_url || '-'}`
+    ? `ok:${snapshot.session_id || '-'}:${snapshot.direction || '-'}:${snapshot.timestamp || '-'}:${snapshot.image_url || '-'}`
     : null;
   if (pulseKey && lastCapturePulseKeys[kind] === pulseKey) return;
   if (pulseKey) lastCapturePulseKeys[kind] = pulseKey;
-  setCaptureStatusChip(target, true, label);
+  setCaptureStatusChip(target, 'ok', label);
   if (captureStatusTimers[kind]) clearTimeout(captureStatusTimers[kind]);
   captureStatusTimers[kind] = setTimeout(() => {
-    setCaptureStatusChip(target, false, label);
+    setCaptureStatusChip(target, 'off', label);
     captureStatusTimers[kind] = null;
   }, 2000);
+}
+
+// Nhãn hiển thị cho lượt quẹt bị từ chối - already_in xảy ra khi quẹt HƯỚNG VÀO (đã có
+// phiên mở, chưa quẹt ra) nên hiện ở chip "RFID vào"; not_found xảy ra khi quẹt HƯỚNG RA
+// mà không tìm thấy phiên đang mở nên hiện ở chip "RFID ra" - xem rfid/service.py.
+const REJECTED_RFID_MESSAGES = {
+  already_in: 'Thẻ đã quẹt vào trước đó - chưa quẹt ra',
+  not_found: 'Chưa quẹt vào - không tìm thấy phiên gửi',
+};
+
+function pulseRejectedStatus(event) {
+  const kind = event.direction === 'in' ? 'entry' : 'exit';
+  const target = kind === 'entry' ? els.lotEntryCaptureStatus : els.lotExitCaptureStatus;
+  const label = kind === 'entry' ? 'RFID vào' : 'RFID ra';
+  const pulseKey = `warn:${event.card_id}:${event.direction}:${event.received_at}`;
+  if (lastCapturePulseKeys[kind] === pulseKey) return;
+  lastCapturePulseKeys[kind] = pulseKey;
+  const reason = REJECTED_RFID_MESSAGES[event.result_status] || event.result_status;
+  setCaptureStatusChip(target, 'warn', label, `${label}: ${reason} (thẻ ${event.card_id})`);
+  if (captureStatusTimers[kind]) clearTimeout(captureStatusTimers[kind]);
+  // Để hiện lâu hơn pulse "OK" thường (3s thay vì 2s) - đây là cảnh báo cần người dùng
+  // chú ý hơn, không nên thoáng qua quá nhanh.
+  captureStatusTimers[kind] = setTimeout(() => {
+    setCaptureStatusChip(target, 'off', label);
+    captureStatusTimers[kind] = null;
+  }, 3000);
+}
+
+function renderRejectedRfidStatus(events) {
+  if (!events || !events.length) return;
+  // Backend đã sort desc theo received_at - phần tử đầu là mới nhất.
+  pulseRejectedStatus(events[0]);
 }
 
 function setCaptureStatusIdle() {
@@ -417,8 +451,8 @@ function setCaptureStatusIdle() {
   if (captureStatusTimers.exit) { clearTimeout(captureStatusTimers.exit); captureStatusTimers.exit = null; }
   lastCapturePulseKeys.entry = null;
   lastCapturePulseKeys.exit = null;
-  setCaptureStatusChip(els.lotEntryCaptureStatus, false, 'RFID vào');
-  setCaptureStatusChip(els.lotExitCaptureStatus, false, 'RFID ra');
+  setCaptureStatusChip(els.lotEntryCaptureStatus, 'off', 'RFID vào');
+  setCaptureStatusChip(els.lotExitCaptureStatus, 'off', 'RFID ra');
 }
 
 function renderLotLatestCaptures(snapshots) {
@@ -436,7 +470,7 @@ function renderLotLatestCaptures(snapshots) {
     els.lotEntryCaptureImg.src = latest.image_url ? absoluteApiUrlNoCache(latest.image_url) : '';
     els.lotExitCaptureImg.src = '';
     pulseCaptureStatus('entry', Boolean(latest.image_url), latest);
-    setCaptureStatusChip(els.lotExitCaptureStatus, false, 'RFID ra');
+    setCaptureStatusChip(els.lotExitCaptureStatus, 'off', 'RFID ra');
     return;
   }
 
@@ -444,7 +478,7 @@ function renderLotLatestCaptures(snapshots) {
     const pairedIn = ordered.find((x) => x.direction === 'in' && x.session_id === latest.session_id);
     els.lotEntryCaptureImg.src = pairedIn?.image_url ? absoluteApiUrlNoCache(pairedIn.image_url) : '';
     els.lotExitCaptureImg.src = latest.image_url ? absoluteApiUrlNoCache(latest.image_url) : '';
-    setCaptureStatusChip(els.lotEntryCaptureStatus, false, 'RFID vào');
+    setCaptureStatusChip(els.lotEntryCaptureStatus, 'off', 'RFID vào');
     pulseCaptureStatus('exit', Boolean(latest.image_url), latest);
     return;
   }
@@ -465,6 +499,7 @@ export async function openParkingLotDetail(lotId) {
   els.lotDetailAiToggle.checked = Boolean(data.lot.ai_enabled);
   renderLotDetailLogs(data.sessions || []);
   renderLotLatestCaptures(data.snapshots || []);
+  renderRejectedRfidStatus(data.rejected_events || []);
   ensureLotStreams(data.lot);
 }
 

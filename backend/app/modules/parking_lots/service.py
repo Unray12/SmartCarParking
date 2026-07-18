@@ -10,13 +10,18 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.parking_lots.model import ParkingLot
-from app.modules.parking_lots.schema import ParkingLotCreate, ParkingLotUpdate, SnapshotItemOut, ParkingSessionBriefOut, ParkingLotOverviewOut, ParkingLotOut
+from app.modules.parking_lots.schema import ParkingLotCreate, ParkingLotUpdate, SnapshotItemOut, ParkingSessionBriefOut, ParkingLotOverviewOut, ParkingLotOut, RejectedRfidEventOut
+from app.modules.rfid.model import RfidEvent
 from app.modules.sessions.model import ParkingSession
 
 if TYPE_CHECKING:
     from app.services.rfid_usb_reader import RfidReaderManager
 
 NO_PLATE_SENTINEL = "__NONE__"
+
+# Trạng thái quẹt thẻ BỊ TỪ CHỐI - không tạo ParkingSession (xem
+# rfid/service.py:_handle_check_in/_handle_check_out) nên phải lấy riêng từ RfidEvent.
+REJECTED_RFID_STATUSES = ("already_in", "not_found")
 
 
 def list_parking_lots(db: Session) -> list[ParkingLot]:
@@ -232,8 +237,25 @@ def get_parking_lot_overview(db: Session, lot_id: int, limit: int = 100) -> Park
         )
     ) or 0
 
+    rejected_rows = db.scalars(
+        select(RfidEvent)
+        .where(RfidEvent.lot_id == lot_id, RfidEvent.result_status.in_(REJECTED_RFID_STATUSES))
+        .order_by(RfidEvent.received_at.desc())
+        .limit(20)
+    ).all()
+    rejected_events = [
+        RejectedRfidEventOut(
+            card_id=e.card_id,
+            direction=e.direction,
+            result_status=e.result_status,
+            received_at=e.received_at,
+        )
+        for e in rejected_rows
+    ]
+
     return ParkingLotOverviewOut(
         lot=lot_to_out(lot, int(occupied)),
         sessions=mapped_sessions,
         snapshots=snapshots,
+        rejected_events=rejected_events,
     )

@@ -72,7 +72,20 @@ class ParkingSessionBriefOut(BaseModel):
     ai_plate_match: bool | None = None
 
 
+class RejectedRfidEventOut(BaseModel):
+    """Lượt quẹt thẻ BỊ TỪ CHỐI (already_in/not_found) tại bãi này - không tạo
+    ParkingSession nên không nằm trong `sessions`/`snapshots` ở trên, phải lấy riêng từ
+    RfidEvent để trang "Chi tiết bãi xe" hiển thị được (chip vàng, phân biệt với xanh =
+    thành công, đỏ = đang không quét)."""
+
+    card_id: str
+    direction: str
+    result_status: str
+    received_at: datetime
+
+
 class ParkingLotOverviewOut(BaseModel):
     lot: ParkingLotOut
     sessions: list[ParkingSessionBriefOut]
     snapshots: list[SnapshotItemOut]
+    rejected_events: list[RejectedRfidEventOut] = []

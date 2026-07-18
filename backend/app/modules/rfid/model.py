@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 
-from sqlalchemy import Boolean, DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database.base import Base, utcnow
@@ -22,6 +22,12 @@ class RfidEvent(Base):
     # IN lần 2 khi thẻ chưa quẹt OUT) ngay cả khi xem qua log/poll, không chỉ lúc gọi API
     # trực tiếp mới thấy status.
     result_status: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    # Bãi đã được RESOLVE (rfid/service.py:_resolve_lot) tại thời điểm xử lý sự kiện -
+    # KHÔNG phải payload.lot_id gốc (có thể None nếu quẹt qua cổng mặc định). Cho phép
+    # trang "Chi tiết bãi xe" hiển thị được cả các lượt quẹt BỊ TỪ CHỐI (already_in/
+    # not_found) theo đúng bãi - trước đây không thể vì các lượt này không tạo
+    # ParkingSession (bảng duy nhất trang đó vốn dùng để biết có gì xảy ra).
+    lot_id: Mapped[int | None] = mapped_column(ForeignKey("parking_lots.id"), nullable=True)
 
 
 class RfidCard(Base):

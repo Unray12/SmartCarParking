@@ -58,7 +58,13 @@ def _latest_unlinked_plate(db: Session, occurred_at: datetime) -> PlateRead | No
     )
 
 
-def _persist_event(db: Session, payload: RfidEventIn, occurred_at: datetime, result_status: str | None = None) -> None:
+def _persist_event(
+    db: Session,
+    payload: RfidEventIn,
+    occurred_at: datetime,
+    result_status: str | None = None,
+    lot_id: int | None = None,
+) -> None:
     event = RfidEvent(
         card_id=payload.card_id,
         direction=payload.direction,
@@ -66,6 +72,11 @@ def _persist_event(db: Session, payload: RfidEventIn, occurred_at: datetime, res
         received_at=occurred_at,
         payload_json=json.dumps(payload.data, ensure_ascii=False),
         result_status=result_status,
+        # lot_id ĐÃ RESOLVE (lot.id sau _resolve_lot), không phải payload.lot_id gốc -
+        # cho phép trang "Chi tiết bãi xe" biết được cả lượt quẹt BỊ TỪ CHỐI
+        # (already_in/not_found) theo đúng bãi, kể cả khi quẹt qua cổng mặc định
+        # (payload.lot_id=None nhưng vẫn resolve ra 1 bãi active cụ thể).
+        lot_id=lot_id,
     )
     db.add(event)
     db.commit()
@@ -379,7 +390,7 @@ def ingest_rfid_event(
     # Lưu event SAU khi đã biết kết quả xử lý - để result_status phản ánh đúng thẻ này
     # bị từ chối (already_in/not_found/plate_mismatch) hay xử lý thành công, giúp UI phân
     # biệt được ngay cả khi xem qua log/poll (không chỉ lúc gọi API trực tiếp mới có status).
-    _persist_event(db, payload, occurred_at, result_status=result.status)
+    _persist_event(db, payload, occurred_at, result_status=result.status, lot_id=lot.id if lot else None)
     return result
 
 

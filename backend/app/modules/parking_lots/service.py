@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import HTTPException
 from sqlalchemy import func, select
@@ -11,6 +12,9 @@ from sqlalchemy.orm import Session
 from app.modules.parking_lots.model import ParkingLot
 from app.modules.parking_lots.schema import ParkingLotCreate, ParkingLotUpdate, SnapshotItemOut, ParkingSessionBriefOut, ParkingLotOverviewOut, ParkingLotOut
 from app.modules.sessions.model import ParkingSession
+
+if TYPE_CHECKING:
+    from app.services.rfid_usb_reader import RfidReaderManager
 
 NO_PLATE_SENTINEL = "__NONE__"
 
@@ -50,7 +54,11 @@ def get_default_active_lot(db: Session) -> ParkingLot | None:
     return db.scalar(select(ParkingLot).where(ParkingLot.is_active.is_(True)).order_by(ParkingLot.id.asc()).limit(1))
 
 
-def create_parking_lot(db: Session, payload: ParkingLotCreate) -> ParkingLot:
+def create_parking_lot(
+    db: Session,
+    payload: ParkingLotCreate,
+    rfid_reader_manager: "RfidReaderManager | None" = None,
+) -> ParkingLot:
     existing = db.scalar(select(ParkingLot).where(ParkingLot.name == payload.name.strip()))
     if existing:
         raise HTTPException(status_code=400, detail="Parking lot name already exists")
@@ -62,14 +70,22 @@ def create_parking_lot(db: Session, payload: ParkingLotCreate) -> ParkingLot:
         exit_camera_id=payload.exit_camera_id,
         is_active=payload.is_active,
         ai_enabled=payload.ai_enabled,
+        rfid_usb_port=(payload.rfid_usb_port or "").strip() or None,
     )
     db.add(lot)
     db.commit()
     db.refresh(lot)
+    if rfid_reader_manager is not None:
+        rfid_reader_manager.upsert_lot(lot)
     return lot
 
 
-def update_parking_lot(db: Session, lot_id: int, payload: ParkingLotUpdate) -> ParkingLot | None:
+def update_parking_lot(
+    db: Session,
+    lot_id: int,
+    payload: ParkingLotUpdate,
+    rfid_reader_manager: "RfidReaderManager | None" = None,
+) -> ParkingLot | None:
     lot = get_parking_lot(db, lot_id)
     if not lot:
         return None
@@ -91,14 +107,21 @@ def update_parking_lot(db: Session, lot_id: int, payload: ParkingLotUpdate) -> P
         lot.is_active = payload.is_active
     if payload.ai_enabled is not None:
         lot.ai_enabled = payload.ai_enabled
+    lot.rfid_usb_port = (payload.rfid_usb_port or "").strip() or None
 
     db.add(lot)
     db.commit()
     db.refresh(lot)
+    if rfid_reader_manager is not None:
+        rfid_reader_manager.upsert_lot(lot)
     return lot
 
 
-def delete_parking_lot(db: Session, lot_id: int) -> bool:
+def delete_parking_lot(
+    db: Session,
+    lot_id: int,
+    rfid_reader_manager: "RfidReaderManager | None" = None,
+) -> bool:
     lot = get_parking_lot(db, lot_id)
     if not lot:
         return False
@@ -108,6 +131,8 @@ def delete_parking_lot(db: Session, lot_id: int) -> bool:
     except IntegrityError:
         db.rollback()
         raise HTTPException(status_code=409, detail="Bãi xe còn lịch sử phiên gửi xe, không thể xóa")
+    if rfid_reader_manager is not None:
+        rfid_reader_manager.remove_lot(lot_id)
     return True
 
 

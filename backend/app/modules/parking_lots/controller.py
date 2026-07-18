@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import get_settings
 from app.database.session import get_db
+from app.dependencies import get_rfid_reader_manager
 from app.modules.auth.dependencies import get_current_user_flexible
 from app.modules.parking_lots.schema import ParkingLotCreate, ParkingLotOut, ParkingLotOverviewOut, ParkingLotUpdate, SnapshotItemOut
 from app.modules.parking_lots.service import (
@@ -20,6 +21,7 @@ from app.modules.parking_lots.service import (
     lot_to_out,
     update_parking_lot,
 )
+from app.services.rfid_usb_reader import RfidReaderManager
 
 # Protected router (gắn prefix /api/v1 + token ở router.py)
 router = APIRouter(tags=["parking-lots"])
@@ -36,22 +38,35 @@ def list_parking_lots_endpoint(db: Session = Depends(get_db)) -> list[ParkingLot
 
 
 @router.post("/parking-lots", response_model=ParkingLotOut)
-def create_parking_lot_endpoint(payload: ParkingLotCreate, db: Session = Depends(get_db)) -> ParkingLotOut:
-    lot = create_parking_lot(db, payload)
+def create_parking_lot_endpoint(
+    payload: ParkingLotCreate,
+    db: Session = Depends(get_db),
+    rfid_reader_manager: RfidReaderManager = Depends(get_rfid_reader_manager),
+) -> ParkingLotOut:
+    lot = create_parking_lot(db, payload, rfid_reader_manager)
     return lot_to_out(lot, 0)
 
 
 @router.put("/parking-lots/{lot_id}", response_model=ParkingLotOut)
-def update_parking_lot_endpoint(lot_id: int, payload: ParkingLotUpdate, db: Session = Depends(get_db)) -> ParkingLotOut:
-    lot = update_parking_lot(db, lot_id, payload)
+def update_parking_lot_endpoint(
+    lot_id: int,
+    payload: ParkingLotUpdate,
+    db: Session = Depends(get_db),
+    rfid_reader_manager: RfidReaderManager = Depends(get_rfid_reader_manager),
+) -> ParkingLotOut:
+    lot = update_parking_lot(db, lot_id, payload, rfid_reader_manager)
     if not lot:
         raise HTTPException(status_code=404, detail="Parking lot not found")
     return lot_to_out(lot)
 
 
 @router.delete("/parking-lots/{lot_id}")
-def delete_parking_lot_endpoint(lot_id: int, db: Session = Depends(get_db)) -> dict[str, bool]:
-    ok = delete_parking_lot(db, lot_id)
+def delete_parking_lot_endpoint(
+    lot_id: int,
+    db: Session = Depends(get_db),
+    rfid_reader_manager: RfidReaderManager = Depends(get_rfid_reader_manager),
+) -> dict[str, bool]:
+    ok = delete_parking_lot(db, lot_id, rfid_reader_manager)
     if not ok:
         raise HTTPException(status_code=404, detail="Parking lot not found")
     return {"ok": True}

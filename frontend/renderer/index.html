@@ -236,6 +236,10 @@
                   <input id="lotAiEnabled" type="checkbox" />
                   Bật AI nhận diện biển số (tự điền biển số lúc vào, so khớp lúc ra)
                 </label>
+                <label>
+                  Cổng RFID USB riêng (tùy chọn)
+                  <input id="lotRfidPort" placeholder="vd: /dev/ttyACM0, COM3 - để trống dùng cổng mặc định" />
+                </label>
                 <div class="compact-actions">
                   <button id="lotSubmitBtn" type="submit">Lưu bãi xe</button>
                   <button class="ghost" id="lotCancelEditBtn" type="button">Hủy sửa</button>
@@ -268,7 +272,7 @@
               <table>
                 <thead>
                   <tr>
-                    <th>ID</th><th>Tên bãi</th><th>Sức chứa</th><th>Lấp đầy</th><th>Cam vào</th><th>Cam ra</th><th>Trạng thái</th><th>AI</th><th>Quản lý</th><th>Sửa</th><th>Xóa</th>
+                    <th>ID</th><th>Tên bãi</th><th>Sức chứa</th><th>Lấp đầy</th><th>Cam vào</th><th>Cam ra</th><th>Trạng thái</th><th>AI</th><th>Cổng RFID</th><th>Quản lý</th><th>Sửa</th><th>Xóa</th>
                   </tr>
                 </thead>
                 <tbody id="lotBody"></tbody>

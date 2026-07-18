@@ -203,7 +203,12 @@ function stopApp() {
   appStarted = false;
   if (mainPoll) { clearInterval(mainPoll); mainPoll = null; }
   if (cameraPoll) { clearInterval(cameraPoll); cameraPoll = null; }
+  // Đóng TOÀN BỘ resource stream/AI của mọi trang, không chỉ trang đang xem lúc logout -
+  // nếu không, WS chi tiết bãi xe (parking) hoặc AI live test vẫn chạy ngầm sau khi
+  // đăng xuất (chỉ dừng lại khi tự tắt trình duyệt/tab, không phải ngay khi logout).
   cameraModule.deactivateDashboardStreams();
+  parking.closeLotDetailStreams();
+  ai.stopAiLiveTest();
 }
 
 async function bootstrap() {

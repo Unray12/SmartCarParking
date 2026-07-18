@@ -33,6 +33,7 @@ export function resetLotForm() {
   els.lotIsActive.checked = true;
   els.lotAiEnabled.checked = false;
   if (els.lotCapacity) els.lotCapacity.value = '50';
+  if (els.lotRfidPort) els.lotRfidPort.value = '';
 }
 
 function fillLotFormForEdit(lot) {
@@ -45,6 +46,7 @@ function fillLotFormForEdit(lot) {
   els.lotExitCamera.value = lot.exit_camera_id ? String(lot.exit_camera_id) : '';
   els.lotIsActive.checked = Boolean(lot.is_active);
   els.lotAiEnabled.checked = Boolean(lot.ai_enabled);
+  if (els.lotRfidPort) els.lotRfidPort.value = lot.rfid_usb_port || '';
 }
 
 // Đổ option camera cho select cổng vào/ra (gọi khi danh sách camera đổi).
@@ -97,7 +99,7 @@ function renderLotFilterOptions(lots) {
 function renderParkingLots(lots) {
   els.lotBody.innerHTML = '';
   if (!lots.length) {
-    els.lotBody.innerHTML = '<tr><td colspan="11" class="empty">Chưa có bãi xe</td></tr>';
+    els.lotBody.innerHTML = '<tr><td colspan="12" class="empty">Chưa có bãi xe</td></tr>';
     return;
   }
 
@@ -118,6 +120,7 @@ function renderParkingLots(lots) {
       <td>${escapeHtml(cameraNameById(lot.exit_camera_id))}</td>
       <td>${lot.is_active ? '<span class="chip chip-in">Active</span>' : '<span class="chip chip-out">Inactive</span>'}</td>
       <td>${lot.ai_enabled ? '<span class="chip chip-in">Bật</span>' : '<span class="chip chip-out">Tắt</span>'}</td>
+      <td>${lot.rfid_usb_port ? escapeHtml(lot.rfid_usb_port) : '<span class="muted">mặc định</span>'}</td>
       <td><button class="ghost lot-manage-btn" data-lot-id="${lot.id}">Quản lý</button></td>
       <td><button class="ghost lot-edit-btn" data-lot-id="${lot.id}">Sửa</button></td>
       <td><button class="ghost lot-delete-btn" data-lot-id="${lot.id}">Xóa</button></td>
@@ -456,7 +459,8 @@ export async function openParkingLotDetail(lotId) {
   lotDetailState.selectedLotId = lotId;
   lotDetailState.currentLot = data.lot;
   els.lotDetailTitle.textContent = `Chi tiết bãi xe: ${data.lot.name} (#${data.lot.id})`;
-  els.lotDetailMeta.textContent = `Cam vào: ${cameraNameById(data.lot.entry_camera_id)} | Cam ra: ${cameraNameById(data.lot.exit_camera_id)}`;
+  const rfidPortLabel = data.lot.rfid_usb_port ? data.lot.rfid_usb_port : 'mặc định (.env)';
+  els.lotDetailMeta.textContent = `Cam vào: ${cameraNameById(data.lot.entry_camera_id)} | Cam ra: ${cameraNameById(data.lot.exit_camera_id)} | Cổng RFID: ${rfidPortLabel}`;
   els.lotDetailAiToggle.disabled = false;
   els.lotDetailAiToggle.checked = Boolean(data.lot.ai_enabled);
   renderLotDetailLogs(data.sessions || []);
@@ -512,6 +516,7 @@ export function initParking(opts = {}) {
           exit_camera_id: els.lotExitCamera.value ? Number(els.lotExitCamera.value) : null,
           is_active: Boolean(els.lotIsActive.checked),
           ai_enabled: Boolean(els.lotAiEnabled.checked),
+          rfid_usb_port: els.lotRfidPort && els.lotRfidPort.value.trim() ? els.lotRfidPort.value.trim() : null,
         }),
       });
       notify(editId ? 'Cập nhật bãi xe thành công' : 'Tạo bãi xe thành công', 'success');
@@ -556,6 +561,7 @@ export function initParking(opts = {}) {
           exit_camera_id: lot.exit_camera_id,
           is_active: lot.is_active,
           ai_enabled: nextEnabled,
+          rfid_usb_port: lot.rfid_usb_port ?? null,
         }),
       });
       lotDetailState.currentLot = { ...lot, ai_enabled: nextEnabled };

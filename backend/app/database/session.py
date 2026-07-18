@@ -75,6 +75,9 @@ def _ensure_runtime_schema() -> None:
         if "ai_enabled" not in lot_cols:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE parking_lots ADD COLUMN ai_enabled BOOLEAN DEFAULT FALSE NOT NULL"))
+        if "rfid_usb_port" not in lot_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE parking_lots ADD COLUMN rfid_usb_port VARCHAR(64)"))
 
     # Index occupancy (idempotent). Postgres/SQLite đều hỗ trợ IF NOT EXISTS.
     if "parking_sessions" in tables:

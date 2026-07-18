@@ -95,6 +95,7 @@ export const els = {
   lotExitCamera: document.getElementById('lotExitCamera'),
   lotIsActive: document.getElementById('lotIsActive'),
   lotAiEnabled: document.getElementById('lotAiEnabled'),
+  lotRfidPort: document.getElementById('lotRfidPort'),
   lotSubmitBtn: document.getElementById('lotSubmitBtn'),
   lotCancelEditBtn: document.getElementById('lotCancelEditBtn'),
   lotBody: document.getElementById('lotBody'),

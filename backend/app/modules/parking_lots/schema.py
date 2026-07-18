@@ -12,6 +12,9 @@ class ParkingLotCreate(BaseModel):
     exit_camera_id: int | None = None
     is_active: bool = True
     ai_enabled: bool = False
+    # Cổng USB/COM đầu đọc RFID riêng cho bãi này (vd /dev/ttyACM0). None/rỗng = không
+    # có đầu đọc riêng, fallback cổng mặc định trong .env.
+    rfid_usb_port: str | None = Field(default=None, max_length=64)
 
 
 class ParkingLotUpdate(BaseModel):
@@ -21,6 +24,7 @@ class ParkingLotUpdate(BaseModel):
     exit_camera_id: int | None = None
     is_active: bool | None = None
     ai_enabled: bool | None = None
+    rfid_usb_port: str | None = Field(default=None, max_length=64)
 
 
 class ParkingLotOut(BaseModel):
@@ -33,6 +37,7 @@ class ParkingLotOut(BaseModel):
     exit_camera_id: int | None
     is_active: bool
     ai_enabled: bool = False
+    rfid_usb_port: str | None = None
     created_at: datetime
     updated_at: datetime
     # Computed occupancy (None khi không tính, ví dụ ở create/update response).

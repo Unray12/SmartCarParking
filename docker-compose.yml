@@ -51,8 +51,11 @@ services:
     # không cần, container không liên quan). Kiểm tra đúng path thật bằng
     # `ls /dev/tty*` trên host trước khi bật - board USB native (YoloUNO/ESP32-S3)
     # thường là /dev/ttyACM0, board qua chip cầu USB-serial thường là /dev/ttyUSB0.
+    # Nhiều bãi xe = nhiều đầu đọc = liệt kê MỖI cổng 1 dòng (path trong container PHẢI
+    # khớp đúng với cổng đã gán cho từng bãi ở form Tạo/Sửa bãi xe trên UI).
     # devices:
     #   - "/dev/ttyACM0:/dev/ttyACM0"
+    #   - "/dev/ttyACM1:/dev/ttyACM1"
 
   frontend:
     build:

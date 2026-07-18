@@ -5,13 +5,18 @@ import re
 import threading
 import time
 from dataclasses import dataclass
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
+
+from sqlalchemy import select
 
 try:
     import serial
     from serial.serialutil import SerialException
 except ImportError:
     serial = None  # type: ignore[assignment]
+
+if TYPE_CHECKING:
+    from app.modules.parking_lots.model import ParkingLot
 
 
 RFID_PATTERN = re.compile(r"\{(in|out):\s*([0-9A-Fa-f:]*)\}")
@@ -168,3 +173,132 @@ class RfidUsbReader:
                 self._on_rfid(direction, card_id)
             except Exception:
                 pass
+
+
+# (direction, card_id, lot_id) -> None. lot_id=None nghĩa là sự kiện đến từ cổng mặc
+# định (không gán riêng cho bãi nào) - ingest_rfid_event sẽ tự fallback về bãi active
+# đầu tiên (_resolve_lot), giữ đúng hành vi cũ trước khi có nhiều đầu đọc.
+RfidLotCallback = Callable[[str, str, "int | None"], None]
+
+
+class RfidReaderManager:
+    """Quản lý NHIỀU RfidUsbReader cùng lúc - 1 cổng "mặc định" (global, từ .env, dùng
+    chung cho các bãi KHÔNG gán cổng riêng) + N cổng riêng theo từng bãi
+    (ParkingLot.rfid_usb_port). Quẹt thẻ ở cổng riêng của bãi nào thì event mang đúng
+    lot_id đó - không còn phải đoán/luôn rơi về bãi đầu tiên như khi chỉ có 1 cổng
+    global. Đồng bộ động khi bãi được tạo/sửa/xóa qua upsert_lot/remove_lot, cùng
+    pattern với CameraStreamManager.upsert_camera/set_enabled/remove_camera.
+
+    Cùng 1 cổng vật lý không được mở 2 lần từ 2 thread khác nhau (OS sẽ báo lỗi "port
+    busy" hoặc gây đọc chồng dữ liệu không xác định) - nếu cổng mặc định trùng với cổng
+    1 bãi đã gán riêng, reader mặc định tự dừng nhường cổng đó cho reader của bãi.
+    """
+
+    def __init__(
+        self,
+        db_session_factory,
+        event_handler: RfidLotCallback,
+        default_port: str,
+        baudrate: int,
+        queue_max_size: int,
+        enabled: bool,
+    ) -> None:
+        self._db_session_factory = db_session_factory
+        self._event_handler = event_handler
+        self._default_port = (default_port or "").strip()
+        self._baudrate = baudrate
+        self._queue_max_size = queue_max_size
+        self._enabled = enabled
+        self._lock = threading.Lock()
+        self._lot_readers: dict[int, RfidUsbReader] = {}
+        self._lot_ports: dict[int, str] = {}
+        self._default_reader: RfidUsbReader | None = None
+
+    def _make_config(self, port: str) -> RfidUsbConfig:
+        return RfidUsbConfig(port=port, baudrate=self._baudrate, queue_max_size=self._queue_max_size, enabled=True)
+
+    def _start_lot_reader(self, lot_id: int, port: str) -> None:
+        reader = RfidUsbReader(
+            self._make_config(port),
+            lambda direction, card_id, _lot_id=lot_id: self._event_handler(direction, card_id, _lot_id),
+        )
+        with self._lock:
+            self._lot_readers[lot_id] = reader
+            self._lot_ports[lot_id] = port
+        reader.start()
+        print(f"[RFID MANAGER] Bãi #{lot_id}: đầu đọc riêng trên cổng {port}")
+
+    def _stop_lot_reader(self, lot_id: int) -> None:
+        with self._lock:
+            reader = self._lot_readers.pop(lot_id, None)
+            self._lot_ports.pop(lot_id, None)
+        if reader:
+            reader.stop()
+
+    def _default_port_claimed(self) -> bool:
+        with self._lock:
+            return self._default_port in self._lot_ports.values()
+
+    def _refresh_default_reader(self) -> None:
+        should_run = bool(self._default_port) and not self._default_port_claimed()
+        running = self._default_reader is not None
+        if should_run and not running:
+            self._default_reader = RfidUsbReader(
+                self._make_config(self._default_port),
+                lambda direction, card_id: self._event_handler(direction, card_id, None),
+            )
+            self._default_reader.start()
+        elif not should_run and running:
+            self._default_reader.stop()
+            self._default_reader = None
+            if self._default_port:
+                print(
+                    f"[RFID MANAGER] Cổng mặc định {self._default_port} đã được 1 bãi "
+                    "gán riêng - dừng reader mặc định để tránh mở trùng cổng"
+                )
+
+    def start(self) -> None:
+        if not self._enabled:
+            print("[RFID MANAGER] Disabled by config (RFID_USB_ENABLED=false)")
+            return
+        with self._db_session_factory() as db:
+            lots: list["ParkingLot"] = list(
+                db.scalars(select(_parking_lot_model()).where(_parking_lot_model().is_active.is_(True))).all()
+            )
+        for lot in lots:
+            port = (lot.rfid_usb_port or "").strip()
+            if port:
+                self._start_lot_reader(lot.id, port)
+        self._refresh_default_reader()
+
+    def shutdown(self) -> None:
+        with self._lock:
+            lot_ids = list(self._lot_readers.keys())
+        for lot_id in lot_ids:
+            self._stop_lot_reader(lot_id)
+        if self._default_reader:
+            self._default_reader.stop()
+            self._default_reader = None
+
+    def upsert_lot(self, lot: "ParkingLot") -> None:
+        if not self._enabled:
+            return
+        self._stop_lot_reader(lot.id)
+        port = (lot.rfid_usb_port or "").strip()
+        if lot.is_active and port:
+            self._start_lot_reader(lot.id, port)
+        self._refresh_default_reader()
+
+    def remove_lot(self, lot_id: int) -> None:
+        if not self._enabled:
+            return
+        self._stop_lot_reader(lot_id)
+        self._refresh_default_reader()
+
+
+def _parking_lot_model():
+    # Import trễ để tránh vòng import (parking_lots.model không phụ thuộc ngược lại
+    # service này, nhưng module rfid_usb_reader được import rất sớm trong lifespan).
+    from app.modules.parking_lots.model import ParkingLot
+
+    return ParkingLot

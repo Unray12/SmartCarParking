@@ -93,6 +93,7 @@ function switchView(viewName) {
       .catch((err) => notify(`Parking lots lỗi: ${err.message}`, 'warn'));
   } else {
     parking.closeLotDetailStreams();
+    parking.stopCaptureStatusPolling();
   }
   if (viewName === 'system') {
     system.runHealthCheck(false).catch((err) => notify(`Health check lỗi: ${err.message}`, 'warn'));
@@ -208,6 +209,7 @@ function stopApp() {
   // đăng xuất (chỉ dừng lại khi tự tắt trình duyệt/tab, không phải ngay khi logout).
   cameraModule.deactivateDashboardStreams();
   parking.closeLotDetailStreams();
+  parking.stopCaptureStatusPolling();
   ai.stopAiLiveTest();
 }
 

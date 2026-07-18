@@ -26,7 +26,7 @@ const captureStatusTimers = { entry: null, exit: null };
 const lastCapturePulseKeys = { entry: null, exit: null };
 const lastRejectedPulseKeys = { entry: null, exit: null };
 // Bãi đang được coi là "đã thiết lập baseline" cho cảnh báo quẹt bị từ chối - xem
-// renderRejectedRfidStatus. null = chưa thiết lập cho bất kỳ bãi nào (lần đầu mở app).
+// applyCaptureStatus. null = chưa thiết lập cho bất kỳ bãi nào (lần đầu mở app).
 let rejectedBaselineLotId = null;
 
 const hooks = { onLotsLoaded: null };
@@ -422,6 +422,11 @@ function setCaptureStatusChip(el, state, label, message = null) {
   el.textContent = message || `${label}: ${state === 'ok' ? 'quét RFID OK' : 'đang không quét'}`;
 }
 
+// Xanh (quẹt OK) cố ý hiện LÂU HƠN vàng/đỏ (theo yêu cầu người dùng) - để có đủ thời gian
+// quan sát kết quả quẹt thành công trước khi chip chuyển tiếp sang trạng thái khác.
+const OK_PULSE_MS = 4000;
+const WARN_PULSE_MS = 3000;
+
 function pulseCaptureStatus(kind, ok, snapshot = null) {
   const target = kind === 'entry' ? els.lotEntryCaptureStatus : els.lotExitCaptureStatus;
   const label = kind === 'entry' ? 'RFID vào' : 'RFID ra';
@@ -439,7 +444,7 @@ function pulseCaptureStatus(kind, ok, snapshot = null) {
   captureStatusTimers[kind] = setTimeout(() => {
     setCaptureStatusChip(target, 'off', label);
     captureStatusTimers[kind] = null;
-  }, 2000);
+  }, OK_PULSE_MS);
 }
 
 // Nhãn hiển thị cho lượt quẹt bị từ chối - already_in xảy ra khi quẹt HƯỚNG VÀO (đã có
@@ -464,40 +469,10 @@ function pulseRejectedStatus(event) {
   const reason = REJECTED_RFID_MESSAGES[event.result_status] || event.result_status;
   setCaptureStatusChip(target, 'warn', label, `${label}: ${reason} (thẻ ${event.card_id})`);
   if (captureStatusTimers[kind]) clearTimeout(captureStatusTimers[kind]);
-  // Để hiện lâu hơn pulse "OK" thường (3s thay vì 2s) - đây là cảnh báo cần người dùng
-  // chú ý hơn, không nên thoáng qua quá nhanh.
   captureStatusTimers[kind] = setTimeout(() => {
     setCaptureStatusChip(target, 'off', label);
     captureStatusTimers[kind] = null;
-  }, 3000);
-}
-
-// API trả "N sự kiện bị từ chối GẦN NHẤT của bãi" - KHÔNG có khái niệm "mới phát sinh từ
-// lúc mở trang" hay chưa, nên lần poll ĐẦU TIÊN sau khi mở/đổi bãi có thể thấy 1 sự kiện
-// đã xảy ra từ RẤT LÂU (vd lúc test tính năng) và hiểu nhầm là "vừa xảy ra" rồi bắn cảnh
-// báo sai lệch cho lượt quẹt hiện tại (đã tự phát hiện: y hệt pattern `hasSyncedInitialLogs`
-// đã dùng ở rfid.js). Sửa bằng cách "thiết lập baseline" lặng lẽ (không pulse) ở lần poll
-// đầu tiên cho MỖI bãi mới mở - chỉ coi là "mới" và pulse cảnh báo từ lần poll thứ 2 trở đi.
-function renderRejectedRfidStatus(events, lotId) {
-  const isFirstLoadForLot = rejectedBaselineLotId !== lotId;
-  if (isFirstLoadForLot) rejectedBaselineLotId = lotId;
-
-  if (!events || !events.length) return;
-  const latestIn = events.find((e) => e.direction === 'in');
-  const latestOut = events.find((e) => e.direction === 'out');
-
-  if (isFirstLoadForLot) {
-    if (latestIn) lastRejectedPulseKeys.entry = rejectedPulseKey(latestIn);
-    if (latestOut) lastRejectedPulseKeys.exit = rejectedPulseKey(latestOut);
-    return;
-  }
-
-  // QUAN TRỌNG: phải tìm mới nhất RIÊNG cho từng hướng (in/out) rồi pulse CẢ HAI nếu có
-  // - không được chỉ lấy events[0] (mới nhất chung của cả 2 hướng), vì nếu 1 lượt
-  // "already_in" (hướng vào) và 1 lượt "not_found" (hướng ra) xảy ra sát nhau, events[0]
-  // chỉ là 1 trong 2 - lượt còn lại (dù cũng vừa xảy ra) sẽ bị bỏ qua hoàn toàn.
-  if (latestIn) pulseRejectedStatus(latestIn);
-  if (latestOut) pulseRejectedStatus(latestOut);
+  }, WARN_PULSE_MS);
 }
 
 function setCaptureStatusIdle() {
@@ -508,28 +483,21 @@ function setCaptureStatusIdle() {
   lastRejectedPulseKeys.entry = null;
   lastRejectedPulseKeys.exit = null;
   rejectedBaselineLotId = null;
+  els.lotEntryCaptureImg.src = '';
+  els.lotExitCaptureRefImg.src = '';
+  els.lotExitCaptureImg.src = '';
   setCaptureStatusChip(els.lotEntryCaptureStatus, 'off', 'RFID vào');
   setCaptureStatusChip(els.lotExitCaptureStatus, 'off', 'RFID ra');
 }
 
-// Ô "capture vào" và ô "capture ra" ĐỘC LẬP hoàn toàn với nhau - mỗi ô tự tìm ảnh mới
-// nhất của ĐÚNG hướng của nó, không còn phụ thuộc "sự kiện mới nhất chung" như trước
-// (trước đây nếu sự kiện mới nhất là OUT, ô "capture vào" bị ghi đè để hiện tạm ảnh vào
-// của phiên đó - gây hiểu nhầm là 2 ô liên quan tới nhau). Ô "capture ra" chia đôi: nửa
-// trái hiện lại ảnh VÀO của ĐÚNG phiên vừa ra (để đối chiếu), nửa phải hiện ảnh chụp
-// thật lúc quẹt ra.
-function renderLotLatestCaptures(snapshots) {
-  if (!snapshots || !snapshots.length) {
-    els.lotEntryCaptureImg.src = '';
-    els.lotExitCaptureRefImg.src = '';
-    els.lotExitCaptureImg.src = '';
-    setCaptureStatusIdle();
-    return;
-  }
-
-  const ordered = [...snapshots].sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
-  const latestIn = ordered.find((x) => x.direction === 'in');
+// Áp dụng kết quả từ endpoint NHẸ `/parking-lots/{id}/capture-status` (xem
+// services.py:get_lot_capture_status) lên 2 ô capture + chip trạng thái. Ô "capture vào"
+// và ô "capture ra" ĐỘC LẬP hoàn toàn với nhau - mỗi ô tự dùng đúng field của hướng nó,
+// không suy luận chéo như code cũ (trước đây 1 hàm dùng chung 1 "sự kiện mới nhất" rồi
+// suy luận ngược cho cả 2 ô, dễ ghi đè nhầm). Ô "capture ra" chia đôi: nửa trái hiện lại
+// ảnh VÀO của ĐÚNG phiên vừa ra (đối chiếu), nửa phải hiện ảnh chụp thật lúc quẹt ra.
+function applyCaptureStatus(status, lotId) {
+  const latestIn = status?.latest_in || null;
   if (latestIn) {
     els.lotEntryCaptureImg.src = latestIn.image_url ? absoluteApiUrlNoCache(latestIn.image_url) : '';
     pulseCaptureStatus('entry', Boolean(latestIn.image_url), latestIn);
@@ -538,9 +506,9 @@ function renderLotLatestCaptures(snapshots) {
     setCaptureStatusChip(els.lotEntryCaptureStatus, 'off', 'RFID vào');
   }
 
-  const latestOut = ordered.find((x) => x.direction === 'out');
+  const latestOut = status?.latest_out || null;
   if (latestOut) {
-    const pairedIn = ordered.find((x) => x.direction === 'in' && x.session_id === latestOut.session_id);
+    const pairedIn = status?.paired_in_for_out || null;
     els.lotExitCaptureRefImg.src = pairedIn?.image_url ? absoluteApiUrlNoCache(pairedIn.image_url) : '';
     els.lotExitCaptureImg.src = latestOut.image_url ? absoluteApiUrlNoCache(latestOut.image_url) : '';
     pulseCaptureStatus('exit', Boolean(latestOut.image_url), latestOut);
@@ -548,6 +516,62 @@ function renderLotLatestCaptures(snapshots) {
     els.lotExitCaptureRefImg.src = '';
     els.lotExitCaptureImg.src = '';
     setCaptureStatusChip(els.lotExitCaptureStatus, 'off', 'RFID ra');
+  }
+
+  // API trả "sự kiện bị từ chối GẦN NHẤT của bãi theo mỗi hướng" - KHÔNG có khái niệm
+  // "mới phát sinh từ lúc mở trang" hay chưa, nên lần poll ĐẦU TIÊN sau khi mở/đổi bãi có
+  // thể thấy 1 sự kiện đã xảy ra từ RẤT LÂU (vd lúc test tính năng) và hiểu nhầm là "vừa
+  // xảy ra" rồi bắn cảnh báo sai lệch đè lên lượt quẹt hiện tại (đã tự phát hiện: y hệt
+  // pattern `hasSyncedInitialLogs` đã dùng ở rfid.js). Sửa bằng cách "thiết lập baseline"
+  // lặng lẽ (không pulse) ở lần poll đầu tiên cho MỖI bãi mới mở - chỉ coi là "mới" và
+  // pulse cảnh báo từ lần poll thứ 2 trở đi.
+  const isFirstLoadForLot = rejectedBaselineLotId !== lotId;
+  if (isFirstLoadForLot) rejectedBaselineLotId = lotId;
+  const rejectedIn = status?.rejected_in || null;
+  const rejectedOut = status?.rejected_out || null;
+  if (isFirstLoadForLot) {
+    if (rejectedIn) lastRejectedPulseKeys.entry = rejectedPulseKey(rejectedIn);
+    if (rejectedOut) lastRejectedPulseKeys.exit = rejectedPulseKey(rejectedOut);
+    return;
+  }
+  if (rejectedIn) pulseRejectedStatus(rejectedIn);
+  if (rejectedOut) pulseRejectedStatus(rejectedOut);
+}
+
+// Poll RIÊNG, tần suất cao (gần realtime) chỉ cho 2 ô capture + chip trạng thái - tách
+// khỏi nhịp poll chậm hơn của `/overview` (điều khiển bởi appState.settings.refreshSeconds,
+// dùng cho bảng log/occupancy/AI toggle - không cần realtime). Tự lên lịch kiểu
+// setTimeout-sau-khi-xong (không phải setInterval) để không chồng lấn nếu 1 lần gọi API
+// chậm hơn dự kiến (giống cách đã sửa cho AI Center live-test).
+const CAPTURE_STATUS_POLL_MS = 1000;
+let captureStatusPollingLotId = null;
+let captureStatusPollTimer = null;
+
+async function pollCaptureStatusLoop(lotId) {
+  if (captureStatusPollingLotId !== lotId) return;
+  try {
+    const status = await api(`/api/v1/parking-lots/${lotId}/capture-status`);
+    if (captureStatusPollingLotId !== lotId) return;
+    applyCaptureStatus(status, lotId);
+  } catch {
+    // Bỏ qua lỗi thoáng qua (mất mạng tạm thời...) - vẫn tiếp tục poll, không dừng hẳn.
+  }
+  if (captureStatusPollingLotId !== lotId) return;
+  captureStatusPollTimer = setTimeout(() => pollCaptureStatusLoop(lotId), CAPTURE_STATUS_POLL_MS);
+}
+
+function startCaptureStatusPolling(lotId) {
+  if (captureStatusPollingLotId === lotId) return;
+  stopCaptureStatusPolling();
+  captureStatusPollingLotId = lotId;
+  pollCaptureStatusLoop(lotId);
+}
+
+export function stopCaptureStatusPolling() {
+  captureStatusPollingLotId = null;
+  if (captureStatusPollTimer) {
+    clearTimeout(captureStatusPollTimer);
+    captureStatusPollTimer = null;
   }
 }
 
@@ -561,8 +585,10 @@ export async function openParkingLotDetail(lotId) {
   els.lotDetailAiToggle.disabled = false;
   els.lotDetailAiToggle.checked = Boolean(data.lot.ai_enabled);
   renderLotDetailLogs(data.sessions || []);
-  renderLotLatestCaptures(data.snapshots || []);
-  renderRejectedRfidStatus(data.rejected_events || [], lotId);
+  // 2 ô capture + chip trạng thái không còn lấy từ đây (nhịp poll chậm, theo
+  // appState.settings.refreshSeconds) - đã tách sang poll riêng tần suất cao hơn hẳn, xem
+  // startCaptureStatusPolling/CAPTURE_STATUS_POLL_MS.
+  startCaptureStatusPolling(lotId);
   ensureLotStreams(data.lot);
 }
 
@@ -633,14 +659,12 @@ export function initParking(opts = {}) {
     lotDetailState.selectedLotId = null;
     lotDetailState.currentLot = null;
     closeLotDetailStreams();
+    stopCaptureStatusPolling();
     els.lotDetailTitle.textContent = 'Chi tiết bãi xe';
     els.lotDetailMeta.textContent = 'Chọn bãi xe từ danh sách để xem dữ liệu riêng.';
     els.lotDetailAiToggle.checked = false;
     els.lotDetailAiToggle.disabled = true;
     els.lotDetailLogBody.innerHTML = '<tr><td colspan="6" class="empty">Chưa có dữ liệu</td></tr>';
-    els.lotEntryCaptureImg.src = '';
-    els.lotExitCaptureRefImg.src = '';
-    els.lotExitCaptureImg.src = '';
     setCaptureStatusIdle();
     setLotPlaceholder('entry', 'Chưa có camera vào');
     setLotPlaceholder('exit', 'Chưa có camera ra');

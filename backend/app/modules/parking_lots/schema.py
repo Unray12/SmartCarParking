@@ -90,3 +90,15 @@ class ParkingLotOverviewOut(BaseModel):
     sessions: list[ParkingSessionBriefOut]
     snapshots: list[SnapshotItemOut]
     rejected_events: list[RejectedRfidEventOut] = []
+
+
+class LotCaptureStatusOut(BaseModel):
+    """Phiên bản NHẸ của overview - chỉ đủ dữ liệu cho 2 ô capture + chip trạng thái ở
+    trang "Chi tiết bãi xe", để FE poll tần suất CAO (gần realtime) mà không phải tính lại
+    occupancy/log/AI toggle như `/overview` (nặng hơn, giữ nhịp poll chậm hơn như cũ)."""
+
+    latest_in: SnapshotItemOut | None = None
+    latest_out: SnapshotItemOut | None = None
+    paired_in_for_out: SnapshotItemOut | None = None
+    rejected_in: RejectedRfidEventOut | None = None
+    rejected_out: RejectedRfidEventOut | None = None

@@ -10,7 +10,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.parking_lots.model import ParkingLot
-from app.modules.parking_lots.schema import ParkingLotCreate, ParkingLotUpdate, SnapshotItemOut, ParkingSessionBriefOut, ParkingLotOverviewOut, ParkingLotOut, RejectedRfidEventOut
+from app.modules.parking_lots.schema import ParkingLotCreate, ParkingLotUpdate, SnapshotItemOut, ParkingSessionBriefOut, ParkingLotOverviewOut, ParkingLotOut, RejectedRfidEventOut, LotCaptureStatusOut
 from app.modules.rfid.model import RfidEvent
 from app.modules.sessions.model import ParkingSession
 
@@ -148,6 +148,40 @@ def resolve_snapshot_path_to_url(absolute_or_relative_path: str) -> str:
     return f"/api/v1/snapshots/files/{parent}/{filename}"
 
 
+def _session_entry_snapshot_item(s: ParkingSession) -> SnapshotItemOut | None:
+    if not s.entry_snapshot_path:
+        return None
+    plate_value = None if s.plate == NO_PLATE_SENTINEL else s.plate
+    return SnapshotItemOut(
+        session_id=s.id,
+        lot_id=s.lot_id,
+        plate=plate_value,
+        rfid_card=s.rfid_card,
+        direction="in",
+        camera_id=s.entry_camera_id,
+        timestamp=s.entry_time,
+        image_path=s.entry_snapshot_path,
+        image_url=resolve_snapshot_path_to_url(s.entry_snapshot_path),
+    )
+
+
+def _session_exit_snapshot_item(s: ParkingSession) -> SnapshotItemOut | None:
+    if not s.exit_snapshot_path or not s.exit_time:
+        return None
+    plate_value = None if s.plate == NO_PLATE_SENTINEL else s.plate
+    return SnapshotItemOut(
+        session_id=s.id,
+        lot_id=s.lot_id,
+        plate=plate_value,
+        rfid_card=s.rfid_card,
+        direction="out",
+        camera_id=s.exit_camera_id,
+        timestamp=s.exit_time,
+        image_path=s.exit_snapshot_path,
+        image_url=resolve_snapshot_path_to_url(s.exit_snapshot_path),
+    )
+
+
 def list_snapshot_items(db: Session, lot_id: int | None, limit: int = 100) -> list[SnapshotItemOut]:
     safe_limit = max(1, min(limit, 500))
     stmt = select(ParkingSession).order_by(ParkingSession.entry_time.desc()).limit(safe_limit)
@@ -158,35 +192,12 @@ def list_snapshot_items(db: Session, lot_id: int | None, limit: int = 100) -> li
     output: list[SnapshotItemOut] = []
 
     for s in rows:
-        plate_value = None if s.plate == NO_PLATE_SENTINEL else s.plate
-        if s.entry_snapshot_path:
-            output.append(
-                SnapshotItemOut(
-                    session_id=s.id,
-                    lot_id=s.lot_id,
-                    plate=plate_value,
-                    rfid_card=s.rfid_card,
-                    direction="in",
-                    camera_id=s.entry_camera_id,
-                    timestamp=s.entry_time,
-                    image_path=s.entry_snapshot_path,
-                    image_url=resolve_snapshot_path_to_url(s.entry_snapshot_path),
-                )
-            )
-        if s.exit_snapshot_path and s.exit_time:
-            output.append(
-                SnapshotItemOut(
-                    session_id=s.id,
-                    lot_id=s.lot_id,
-                    plate=plate_value,
-                    rfid_card=s.rfid_card,
-                    direction="out",
-                    camera_id=s.exit_camera_id,
-                    timestamp=s.exit_time,
-                    image_path=s.exit_snapshot_path,
-                    image_url=resolve_snapshot_path_to_url(s.exit_snapshot_path),
-                )
-            )
+        entry_item = _session_entry_snapshot_item(s)
+        if entry_item:
+            output.append(entry_item)
+        exit_item = _session_exit_snapshot_item(s)
+        if exit_item:
+            output.append(exit_item)
 
     output.sort(key=lambda x: x.timestamp, reverse=True)
     return output[:safe_limit]
@@ -244,19 +255,72 @@ def get_parking_lot_overview(db: Session, lot_id: int, limit: int = 100) -> Park
         .order_by(RfidEvent.received_at.desc())
         .limit(20)
     ).all()
-    rejected_events = [
-        RejectedRfidEventOut(
-            card_id=e.card_id,
-            direction=e.direction,
-            result_status=e.result_status,
-            received_at=e.received_at,
-        )
-        for e in rejected_rows
-    ]
+    rejected_events = [_rejected_event_out(e) for e in rejected_rows]
 
     return ParkingLotOverviewOut(
         lot=lot_to_out(lot, int(occupied)),
         sessions=mapped_sessions,
         snapshots=snapshots,
         rejected_events=rejected_events,
+    )
+
+
+def _rejected_event_out(e: RfidEvent) -> RejectedRfidEventOut:
+    return RejectedRfidEventOut(
+        card_id=e.card_id,
+        direction=e.direction,
+        result_status=e.result_status,
+        received_at=e.received_at,
+    )
+
+
+def get_lot_capture_status(db: Session, lot_id: int) -> LotCaptureStatusOut | None:
+    """Phiên bản NHẸ của overview - CHỈ phục vụ 2 ô capture + chip trạng thái RFID ở
+    trang "Chi tiết bãi xe", để FE poll nhanh hơn (gần realtime) mà không phải tính lại
+    occupancy/danh sách session/log - những phần này vẫn giữ nhịp poll chậm hơn qua
+    `/overview` như cũ. 4 query LIMIT 1 riêng biệt, rẻ hơn nhiều so với kéo cả 100 session
+    + 20 rfid_event rồi lọc ở FE (cách cũ)."""
+    lot = get_parking_lot(db, lot_id)
+    if not lot:
+        return None
+
+    latest_in_session = db.scalar(
+        select(ParkingSession)
+        .where(ParkingSession.lot_id == lot_id, ParkingSession.entry_snapshot_path.isnot(None))
+        .order_by(ParkingSession.entry_time.desc())
+        .limit(1)
+    )
+    latest_out_session = db.scalar(
+        select(ParkingSession)
+        .where(
+            ParkingSession.lot_id == lot_id,
+            ParkingSession.exit_time.isnot(None),
+            ParkingSession.exit_snapshot_path.isnot(None),
+        )
+        .order_by(ParkingSession.exit_time.desc())
+        .limit(1)
+    )
+
+    rejected_in = db.scalar(
+        select(RfidEvent)
+        .where(RfidEvent.lot_id == lot_id, RfidEvent.direction == "in", RfidEvent.result_status.in_(REJECTED_RFID_STATUSES))
+        .order_by(RfidEvent.received_at.desc())
+        .limit(1)
+    )
+    rejected_out = db.scalar(
+        select(RfidEvent)
+        .where(RfidEvent.lot_id == lot_id, RfidEvent.direction == "out", RfidEvent.result_status.in_(REJECTED_RFID_STATUSES))
+        .order_by(RfidEvent.received_at.desc())
+        .limit(1)
+    )
+
+    return LotCaptureStatusOut(
+        latest_in=_session_entry_snapshot_item(latest_in_session) if latest_in_session else None,
+        latest_out=_session_exit_snapshot_item(latest_out_session) if latest_out_session else None,
+        # Ảnh vào của ĐÚNG phiên vừa ra - lấy từ CÙNG 1 row `latest_out_session`, không
+        # phải query riêng (session ra nào cũng có sẵn field entry_snapshot_path của
+        # chính nó).
+        paired_in_for_out=_session_entry_snapshot_item(latest_out_session) if latest_out_session else None,
+        rejected_in=_rejected_event_out(rejected_in) if rejected_in else None,
+        rejected_out=_rejected_event_out(rejected_out) if rejected_out else None,
     )

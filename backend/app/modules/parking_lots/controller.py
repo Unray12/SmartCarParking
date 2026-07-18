@@ -10,10 +10,11 @@ from app.core.config import get_settings
 from app.database.session import get_db
 from app.dependencies import get_rfid_reader_manager
 from app.modules.auth.dependencies import get_current_user_flexible
-from app.modules.parking_lots.schema import ParkingLotCreate, ParkingLotOut, ParkingLotOverviewOut, ParkingLotUpdate, SnapshotItemOut
+from app.modules.parking_lots.schema import ParkingLotCreate, ParkingLotOut, ParkingLotOverviewOut, ParkingLotUpdate, SnapshotItemOut, LotCaptureStatusOut
 from app.modules.parking_lots.service import (
     create_parking_lot,
     delete_parking_lot,
+    get_lot_capture_status,
     get_parking_lot_overview,
     get_parking_lot,
     list_parking_lots_with_occupancy,
@@ -83,6 +84,17 @@ def parking_lot_overview_endpoint(lot_id: int, limit: int = 100, db: Session = D
     if not overview:
         raise HTTPException(status_code=404, detail="Parking lot not found")
     return overview
+
+
+# Endpoint NHẸ, poll tần suất cao (gần realtime) cho riêng 2 ô capture + chip trạng thái -
+# xem docstring get_lot_capture_status. Danh sách session/log/occupancy vẫn dùng /overview
+# ở nhịp poll chậm hơn như cũ.
+@router.get("/parking-lots/{lot_id}/capture-status", response_model=LotCaptureStatusOut)
+def parking_lot_capture_status_endpoint(lot_id: int, db: Session = Depends(get_db)) -> LotCaptureStatusOut:
+    status = get_lot_capture_status(db, lot_id=lot_id)
+    if not status:
+        raise HTTPException(status_code=404, detail="Parking lot not found")
+    return status
 
 
 @files_router.get("/snapshots/files/{folder}/{filename}", include_in_schema=False)

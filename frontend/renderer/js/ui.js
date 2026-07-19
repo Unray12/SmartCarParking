@@ -14,6 +14,22 @@ export function escapeHtml(value) {
   return String(value ?? '').replace(/[&<>"']/g, (ch) => HTML_ESCAPE_MAP[ch]);
 }
 
+// Nhãn trạng thái luồng camera dùng CHUNG cho mọi nơi hiển thị (card, phóng lớn, chi tiết
+// bãi) để đồng bộ - stream.js phát mode qua onMode, các view gọi setStreamStatusChip.
+export const STREAM_STATUS_LABELS = {
+  connecting: 'Đang kết nối…',
+  webrtc: 'WebRTC',
+  jpeg: 'JPEG',
+  error: 'Mất kết nối'
+};
+
+// Cập nhật 1 chip trạng thái luồng (span.stream-status). mode = null -> ẩn chip.
+export function setStreamStatusChip(el, mode) {
+  if (!el) return;
+  el.className = `stream-status ${mode ? `mode-${mode}` : 'mode-none'}`;
+  el.textContent = mode ? (STREAM_STATUS_LABELS[mode] || '') : '';
+}
+
 export function notify(message, type = 'info') {
   els.globalNotice.textContent = message;
   els.globalNotice.className = `notice ${type === 'info' ? '' : type}`.trim();
@@ -23,6 +39,22 @@ export function notify(message, type = 'info') {
     noticeTimeout = setTimeout(() => {
       els.globalNotice.className = 'notice';
     }, 2800);
+  }
+}
+
+// Chống double-submit + phản hồi "đang xử lý": vô hiệu hoá nút trong lúc chạy tác vụ async,
+// đổi nhãn tạm thời, luôn phục hồi ở finally (kể cả khi lỗi). Trả về kết quả của fn.
+export async function withButtonBusy(button, busyLabel, fn) {
+  if (!button) return fn();
+  const prevLabel = button.textContent;
+  const prevDisabled = button.disabled;
+  button.disabled = true;
+  if (busyLabel) button.textContent = busyLabel;
+  try {
+    return await fn();
+  } finally {
+    button.disabled = prevDisabled;
+    button.textContent = prevLabel;
   }
 }
 

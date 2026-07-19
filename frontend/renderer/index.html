@@ -190,11 +190,12 @@
 
           <article class="panel focus-panel is-hidden" id="focusPanel">
             <div class="panel-head inline">
-              <div>
+              <div class="focus-title-wrap">
                 <h3 id="focusTitle">Camera phóng lớn</h3>
                 <p class="muted" id="focusMeta">Chọn camera để phóng lớn</p>
               </div>
               <div class="compact-actions">
+                <span id="focusStreamStatus" class="stream-status mode-none"></span>
                 <button class="ghost" id="focusFullscreenBtn" type="button">Fullscreen</button>
                 <button class="ghost" id="focusCloseBtn" type="button">Đóng</button>
               </div>
@@ -298,7 +299,7 @@
 
             <section class="view-grid two-col panel-content">
               <article class="panel sub">
-                <div class="panel-head"><h3>Live cam vào</h3></div>
+                <div class="panel-head"><h3>Live cam vào</h3><span id="lotEntryStreamStatus" class="stream-status mode-none"></span></div>
                 <div class="preview">
                   <video id="lotEntryVideo" class="stream-video" autoplay muted playsinline></video>
                   <canvas id="lotEntryCanvas"></canvas>
@@ -306,7 +307,7 @@
                 </div>
               </article>
               <article class="panel sub">
-                <div class="panel-head"><h3>Live cam ra</h3></div>
+                <div class="panel-head"><h3>Live cam ra</h3><span id="lotExitStreamStatus" class="stream-status mode-none"></span></div>
                 <div class="preview">
                   <video id="lotExitVideo" class="stream-video" autoplay muted playsinline></video>
                   <canvas id="lotExitCanvas"></canvas>

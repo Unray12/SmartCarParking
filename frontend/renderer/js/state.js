@@ -50,8 +50,29 @@ export const VIEW_META = {
 };
 
 const STORAGE_KEYS = {
-  settings: 'scp_settings_v1'
+  settings: 'scp_settings_v1',
+  // Giữ phiên điều hướng: trang đang xem + lựa chọn con (camera phóng lớn, bãi đang mở chi
+  // tiết) để refresh/quay lại vẫn ở đúng chỗ. Tách khỏi settings vì thay đổi tần suất cao.
+  nav: 'scp_nav_v1'
 };
+
+export function loadNav() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEYS.nav)) || {};
+  } catch {
+    return {};
+  }
+}
+
+// Ghi 1 phần trạng thái điều hướng (merge với phần đã lưu). VD saveNav({ view: 'parking' }).
+export function saveNav(patch) {
+  try {
+    const next = { ...loadNav(), ...patch };
+    localStorage.setItem(STORAGE_KEYS.nav, JSON.stringify(next));
+  } catch {
+    // ignore (localStorage đầy/bị chặn) - giữ phiên là tính năng phụ, không được làm vỡ app.
+  }
+}
 
 export const appState = {
   currentView: 'overview',

@@ -54,11 +54,13 @@ class MediaMTXClient:
             # Ép TCP cho ổn định (khớp cấu hình phía backend & Docker Desktop/Windows).
             "rtspTransport": "tcp",
         }
-        # /add sẽ 400 nếu path đã có -> fallback sang /replace để cập nhật cấu hình.
+        # /add trả 400 nếu path đã tồn tại -> fallback sang /replace (POST, không phải PATCH)
+        # để ghi đè cấu hình. Xảy ra khi backend restart mà MediaMTX vẫn giữ path cũ: bootstrap
+        # re-add path đã có, cần replace để source luôn khớp DB (camera có thể đã đổi URL).
         status, _ = self._request("POST", f"/v3/config/paths/add/{name}", conf)
         if status in (200, 201):
             return True
-        status, _ = self._request("PATCH", f"/v3/config/paths/replace/{name}", conf)
+        status, _ = self._request("POST", f"/v3/config/paths/replace/{name}", conf)
         return status in (200, 201)
 
     def remove_camera_path(self, camera_id: int) -> bool:

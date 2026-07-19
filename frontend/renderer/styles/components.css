@@ -100,17 +100,8 @@ button.ghost:hover { background: #1c2b45; border-color: #38507a; color: #fff; }
 .stream-video { display: none; }
 .stream-video.is-live { display: block; }
 
-/* Badge góc khung cho biết luồng đang chạy bằng gì: WebRTC (xanh) hay JPEG fallback (vàng).
-   stream.js set data-stream-mode lên element cha của <video> (.preview / .focus-stage). */
-[data-stream-mode]::after {
-  position: absolute; top: 6px; right: 6px; z-index: 3; pointer-events: none;
-  font-size: 0.6rem; font-weight: 800; letter-spacing: 0.05em;
-  padding: 2px 7px; border-radius: 6px; line-height: 1.4;
-}
-[data-stream-mode="webrtc"]::after { content: 'WebRTC'; background: rgba(34, 197, 94, 0.88); color: #04140a; }
-[data-stream-mode="jpeg"]::after { content: 'JPEG'; background: rgba(234, 179, 8, 0.9); color: #1a1400; }
-[data-stream-mode="connecting"]::after { content: 'Đang kết nối…'; background: rgba(100, 116, 139, 0.85); color: #fff; }
-[data-stream-mode="error"]::after { content: 'Mất kết nối – thử lại…'; background: rgba(239, 68, 68, 0.9); color: #fff; }
+/* Trạng thái luồng giờ hiển thị bằng chip .stream-status trên header (card/focus/parking),
+   không còn badge overlay góc khung - xem stream.js::onMode + ui.js::setStreamStatusChip. */
 
 /* ============================ AI live test ============================ */
 .ai-live-controls { display: flex; gap: 8px; margin-top: 8px; }

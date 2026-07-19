@@ -2,7 +2,7 @@
 import { api, wsCameraUrl } from '../api.js';
 import { appState } from '../state.js';
 import { els } from '../dom.js';
-import { notify } from '../ui.js';
+import { notify, withButtonBusy } from '../ui.js';
 
 // Đổ option camera cho select test AI (gọi khi danh sách camera đổi).
 export function renderAiCameraOptions() {
@@ -225,10 +225,12 @@ export function initAi() {
     ev.preventDefault();
     const file = els.aiModelFile.files?.[0];
     if (!file) return;
+    const submitBtn = ev.submitter || els.aiUploadForm.querySelector('[type="submit"]');
     try {
       const form = new FormData();
       form.append('file', file);
-      const result = await api('/api/v1/ai/models', { method: 'POST', body: form });
+      const result = await withButtonBusy(submitBtn, 'Đang upload…', () =>
+        api('/api/v1/ai/models', { method: 'POST', body: form }));
       notify(`Upload model thành công: ${result.filename}`, 'success');
       els.aiUploadForm.reset();
       await refreshAiStatus();

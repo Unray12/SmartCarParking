@@ -1,9 +1,9 @@
 // Trang Parking Lots: CRUD bãi, sức chứa/occupancy, ảnh chụp, chi tiết bãi (live + capture + log).
 import { api, wsCameraUrl } from '../api.js';
-import { appState } from '../state.js';
+import { appState, loadNav, saveNav } from '../state.js';
 import { els } from '../dom.js';
 import { createStreamSession } from '../stream.js';
-import { notify, fmtDate, absoluteApiUrl, absoluteApiUrlNoCache, cameraNameById, occClass, occRate, escapeHtml } from '../ui.js';
+import { notify, fmtDate, absoluteApiUrl, absoluteApiUrlNoCache, cameraNameById, occClass, occRate, escapeHtml, setStreamStatusChip, withButtonBusy } from '../ui.js';
 
 const lotDetailState = {
   selectedLotId: null,
@@ -189,8 +189,8 @@ function setLotPlaceholder(kind, text) {
 
 function lotEls(kind) {
   return kind === 'entry'
-    ? { video: els.lotEntryVideo, canvas: els.lotEntryCanvas, placeholder: els.lotEntryPlaceholder }
-    : { video: els.lotExitVideo, canvas: els.lotExitCanvas, placeholder: els.lotExitPlaceholder };
+    ? { video: els.lotEntryVideo, canvas: els.lotEntryCanvas, placeholder: els.lotEntryPlaceholder, status: els.lotEntryStreamStatus }
+    : { video: els.lotExitVideo, canvas: els.lotExitCanvas, placeholder: els.lotExitPlaceholder, status: els.lotExitStreamStatus };
 }
 
 // Fallback JPEG-over-WebSocket cho 1 hướng, vẽ lên canvas tương ứng. Trả { stop }. Tự mở
@@ -263,12 +263,13 @@ function makeLotJpeg(kind, cameraId) {
 }
 
 function openLotKind(kind, cameraId) {
-  const { video, canvas, placeholder } = lotEls(kind);
+  const { video, canvas, placeholder, status } = lotEls(kind);
   canvas.width = 1280;
   canvas.height = 720;
 
   if (!cameraId) {
     setLotPlaceholder(kind, kind === 'entry' ? 'Chưa có camera vào' : 'Chưa có camera ra');
+    setStreamStatusChip(status, null);
     return null;
   }
 
@@ -285,16 +286,18 @@ function openLotKind(kind, cameraId) {
       video.classList.remove('is-live');
       canvas.style.display = '';
     },
-    startJpeg: () => makeLotJpeg(kind, cameraId)
+    startJpeg: () => makeLotJpeg(kind, cameraId),
+    onMode: (mode) => setStreamStatusChip(status, mode)
   });
   session.start();
   return session;
 }
 
 function resetLotVideo(kind) {
-  const { video, canvas } = lotEls(kind);
+  const { video, canvas, status } = lotEls(kind);
   if (video) video.classList.remove('is-live');
   if (canvas) canvas.style.display = '';
+  setStreamStatusChip(status, null);
 }
 
 export function closeLotDetailStreams() {
@@ -538,8 +541,19 @@ export function stopCaptureStatusPolling() {
 }
 
 export async function openParkingLotDetail(lotId) {
-  const data = await api(`/api/v1/parking-lots/${lotId}/overview?limit=100`);
+  let data;
+  try {
+    data = await api(`/api/v1/parking-lots/${lotId}/overview?limit=100`);
+  } catch (err) {
+    // Bãi (đã lưu phiên) không còn tồn tại -> bỏ chọn để khỏi cố mở lại mỗi nhịp poll.
+    if (lotDetailState.selectedLotId === lotId) {
+      lotDetailState.selectedLotId = null;
+      saveNav({ selectedLotId: null });
+    }
+    throw err;
+  }
   lotDetailState.selectedLotId = lotId;
+  saveNav({ selectedLotId: lotId });  // giữ phiên: refresh vẫn mở lại đúng bãi này
   lotDetailState.currentLot = data.lot;
   els.lotDetailTitle.textContent = `Chi tiết bãi xe: ${data.lot.name} (#${data.lot.id})`;
   const rfidPortLabel = data.lot.rfid_usb_port ? data.lot.rfid_usb_port : 'mặc định (.env)';
@@ -584,6 +598,11 @@ export async function refreshSnapshotList() {
 export function initParking(opts = {}) {
   hooks.onLotsLoaded = opts.onLotsLoaded || null;
 
+  // Khôi phục bãi đang mở chi tiết từ phiên trước: chỉ set id, switchView('parking') ở
+  // main.js sẽ tự openParkingLotDetail nếu getSelectedLotId() có giá trị (và bãi còn tồn tại).
+  const savedLotId = loadNav().selectedLotId;
+  if (savedLotId) lotDetailState.selectedLotId = savedLotId;
+
   els.lotForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const name = els.lotName.value.trim();
@@ -592,8 +611,9 @@ export function initParking(opts = {}) {
     const method = editId ? 'PUT' : 'POST';
     const path = editId ? `/api/v1/parking-lots/${editId}` : '/api/v1/parking-lots';
 
+    const submitBtn = ev.submitter || els.lotSubmitBtn;
     try {
-      await api(path, {
+      await withButtonBusy(submitBtn, 'Đang lưu…', () => api(path, {
         method,
         body: JSON.stringify({
           name,
@@ -604,7 +624,7 @@ export function initParking(opts = {}) {
           ai_enabled: Boolean(els.lotAiEnabled.checked),
           rfid_usb_port: els.lotRfidPort && els.lotRfidPort.value.trim() ? els.lotRfidPort.value.trim() : null,
         }),
-      });
+      }));
       notify(editId ? 'Cập nhật bãi xe thành công' : 'Tạo bãi xe thành công', 'success');
       resetLotForm();
       await loadParkingLots();
@@ -619,6 +639,7 @@ export function initParking(opts = {}) {
 
   els.lotDetailCloseBtn.addEventListener('click', () => {
     lotDetailState.selectedLotId = null;
+    saveNav({ selectedLotId: null });
     lotDetailState.currentLot = null;
     closeLotDetailStreams();
     stopCaptureStatusPolling();

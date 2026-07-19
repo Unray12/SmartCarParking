@@ -1,5 +1,7 @@
 import { wsCameraUrl } from './api.js';
 import { createStreamSession } from './stream.js';
+import { setStreamStatusChip, withButtonBusy } from './ui.js';
+import { loadNav, saveNav } from './state.js';
 
 export function createCameraModule({ els, state, api, notify, onCameraMutated, onCamerasUpdated }) {
   const cameraViews = new Map();
@@ -42,6 +44,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     focusRuntime.cameraId = null;
     if (els.focusVideo) els.focusVideo.classList.remove('is-live');
     if (els.focusCanvas) els.focusCanvas.style.display = '';
+    setStreamStatusChip(els.focusStreamStatus, null);
   }
 
   function renderFocusHeader() {
@@ -138,7 +141,8 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       startJpeg: () => {
         openFocusJpeg(cameraId);
         return { stop: closeFocusJpeg };
-      }
+      },
+      onMode: (mode) => setStreamStatusChip(els.focusStreamStatus, mode)
     });
     focusRuntime.session.start();
   }
@@ -166,11 +170,13 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
 
   function setFocusedCamera(cameraId) {
     state.focusedCameraId = cameraId;
+    saveNav({ focusedCameraId: cameraId });  // giữ phiên: refresh vẫn phóng lớn đúng camera
     syncFocusedCamera();
   }
 
   function clearFocusedCamera(message = null) {
     state.focusedCameraId = null;
+    saveNav({ focusedCameraId: null });
     closeFocusSocket();
     syncFocusedCamera();
     if (message) {
@@ -207,11 +213,12 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       return;
     }
 
+    const submitBtn = ev.submitter || els.cameraEditForm.querySelector('[type="submit"]');
     try {
-      await api(`/api/v1/cameras/${editingCameraId}`, {
+      await withButtonBusy(submitBtn, 'Đang lưu…', () => api(`/api/v1/cameras/${editingCameraId}`, {
         method: 'PUT',
         body: JSON.stringify({ name, source_url: sourceUrl, enabled })
-      });
+      }));
 
       closeEditModal();
       await loadCameras();
@@ -287,17 +294,9 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     }
 
     // Chip trạng thái luồng trên thanh header (cùng hàng nút Đang bật/tắt) - thay cho badge
-    // overlay góc video. stream.js gọi qua onMode mỗi khi trạng thái đổi.
-    const STREAM_LABELS = {
-      connecting: 'Đang kết nối…',
-      webrtc: 'WebRTC',
-      jpeg: 'JPEG',
-      error: 'Mất kết nối'
-    };
-    function setStreamStatus(mode) {
-      streamStatusEl.className = `stream-status ${mode ? `mode-${mode}` : 'mode-none'}`;
-      streamStatusEl.textContent = mode ? (STREAM_LABELS[mode] || '') : '';
-    }
+    // overlay góc video. stream.js gọi qua onMode mỗi khi trạng thái đổi. Dùng helper chung
+    // (ui.js) để đồng bộ với focus/parking.
+    const setStreamStatus = (mode) => setStreamStatusChip(streamStatusEl, mode);
 
     let animFrame = null;
     async function consumeFrame() {
@@ -559,6 +558,15 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
   function init() {
     els.focusCanvas.width = 1280;
     els.focusCanvas.height = 720;
+
+    // Khôi phục camera đang phóng lớn từ phiên trước. Chỉ set id; syncFocusedCamera (chạy khi
+    // vào tab cameras) sẽ mở lại. Nếu camera không còn/đang tắt, loadCameras/openFocusSocket
+    // tự xử lý (auto clear hoặc hiện placeholder).
+    if (state.focusedCameraId == null) {
+      const savedFocus = loadNav().focusedCameraId;
+      if (savedFocus != null) state.focusedCameraId = savedFocus;
+    }
+
     renderFocusHeader();
 
     els.focusCloseBtn.addEventListener('click', () => clearFocusedCamera());
@@ -579,6 +587,12 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     els.cameraEditCloseBtn.addEventListener('click', closeEditModal);
     els.cameraEditModal.addEventListener('click', (ev) => {
       if (ev.target === els.cameraEditModal) {
+        closeEditModal();
+      }
+    });
+    // Esc đóng modal sửa camera (UX cơ bản: modal luôn thoát được bằng phím Esc).
+    window.addEventListener('keydown', (ev) => {
+      if (ev.key === 'Escape' && !els.cameraEditModal.classList.contains('is-hidden')) {
         closeEditModal();
       }
     });

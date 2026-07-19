@@ -1,8 +1,8 @@
 // Orchestrator: ghép các module/trang, điều phối chuyển tab, polling, vòng đời app.
 import { api, API_BASE, getStoredUser } from './api.js';
-import { appState, VIEW_META, loadStorage, saveSettings } from './state.js';
+import { appState, VIEW_META, loadStorage, saveSettings, loadNav, saveNav } from './state.js';
 import { els } from './dom.js';
-import { notify } from './ui.js';
+import { notify, withButtonBusy } from './ui.js';
 import { initLayout, applySettingsToForm, applySidebarUiState, closeSidebarMobile } from './layout.js';
 import { initAccount, renderUserState, isAuthenticated, goToLogin } from './account.js';
 import { createCameraModule } from './camera.js';
@@ -43,9 +43,16 @@ const cameraModule = createCameraModule({
 const logModule = createLogModule({ els, state: appState, notify });
 
 // ---- Điều hướng tab ----
-function switchView(viewName) {
+// updateHash=false khi chính hashchange (back/forward) gọi vào -> tránh set lại hash gây lặp.
+function switchView(viewName, { updateHash = true } = {}) {
   if (!VIEW_META[viewName]) return;
   appState.currentView = viewName;
+
+  // Giữ phiên: nhớ trang đang xem + phản ánh lên URL (refresh/bookmark/back-forward đều đúng).
+  saveNav({ view: viewName });
+  if (updateHash && location.hash.replace(/^#/, '') !== viewName) {
+    location.hash = viewName;
+  }
 
   for (const item of els.navItems) {
     item.classList.toggle('is-active', item.dataset.view === viewName);
@@ -101,6 +108,16 @@ function switchView(viewName) {
   logModule.onViewChange(viewName);
 }
 
+// Trang khởi động: ưu tiên URL hash (bookmark/refresh/chia sẻ link), rồi tới trang đã lưu
+// phiên trước, cuối cùng mặc định overview. Bỏ hash không hợp lệ.
+function getInitialView() {
+  const fromHash = location.hash.replace(/^#/, '');
+  if (VIEW_META[fromHash]) return fromHash;
+  const saved = loadNav().view;
+  if (VIEW_META[saved]) return saved;
+  return 'overview';
+}
+
 // ---- Polling: chỉ làm mới dữ liệu của tab đang xem (giảm tải, hợp với NUC) ----
 function resetPolling() {
   if (mainPoll) { clearInterval(mainPoll); mainPoll = null; }
@@ -145,16 +162,25 @@ function bindGlobalEvents() {
     });
   }
 
+  // Nút back/forward của trình duyệt đổi hash -> đồng bộ view (không set lại hash để khỏi lặp).
+  window.addEventListener('hashchange', () => {
+    const view = location.hash.replace(/^#/, '');
+    if (VIEW_META[view] && view !== appState.currentView) {
+      switchView(view, { updateHash: false });
+    }
+  });
+
   els.cameraForm.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     const name = els.cameraName.value.trim();
     const sourceUrl = els.cameraUrl.value.trim();
     if (!name || !sourceUrl) return;
+    const submitBtn = ev.submitter || els.cameraForm.querySelector('[type="submit"]');
     try {
-      await api('/api/v1/cameras', {
+      await withButtonBusy(submitBtn, 'Đang thêm…', () => api('/api/v1/cameras', {
         method: 'POST',
         body: JSON.stringify({ name, source_url: sourceUrl, enabled: true })
-      });
+      }));
       els.cameraForm.reset();
       await cameraModule.loadCameras();
       await onCameraMutated();
@@ -196,7 +222,7 @@ async function startApp() {
   } catch (err) {
     notify(`Không thể kết nối backend (${API_BASE}): ${err.message}`, 'error');
   }
-  switchView('overview');
+  switchView(getInitialView());
   resetPolling();
 }
 

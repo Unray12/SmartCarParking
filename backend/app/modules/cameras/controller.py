@@ -5,9 +5,11 @@ import asyncio
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
 from app.database.session import get_db
 from app.dependencies import get_camera_manager
 from app.modules.auth.security import decode_token
+from app.modules.cameras.model import Camera
 from app.modules.cameras.schema import CameraCreate, CameraOut, CameraToggleRequest, CameraUpdateRequest
 from app.modules.cameras.service import (
     create_camera,
@@ -70,6 +72,29 @@ def update_camera_endpoint(
     return update_camera(db, camera_id, payload, camera_manager)
 
 
+@router.get("/{camera_id}/webrtc")
+def camera_webrtc_info(camera_id: int, db: Session = Depends(get_db)) -> dict:
+    """Cho frontend biết camera này có xem được qua WebRTC không, và path/base để dựng URL
+    WHEP. WebRTC chỉ khả dụng khi bật tính năng + camera là nguồn rtsp:// (MediaMTX chỉ kéo
+    được RTSP) + camera đang enabled. Nguồn HTTP/MJPEG hoặc khi tắt tính năng -> available
+    False, frontend tự dùng JPEG-over-WS như cũ."""
+    settings = get_settings()
+    camera = db.get(Camera, camera_id)
+    available = bool(
+        settings.stream_webrtc_enabled
+        and camera is not None
+        and camera.enabled
+        and camera.source_url.lower().startswith("rtsp://")
+    )
+    return {
+        "available": available,
+        # path MediaMTX cho camera này (khớp MediaMTXClient.path_name).
+        "path": f"cam{camera_id}",
+        # Base công khai nếu đặt sẵn (reverse-proxy); rỗng => frontend tự suy ra host:8889.
+        "public_base": settings.mediamtx_webrtc_public_base or "",
+    }
+
+
 @ws_router.websocket("/ws/cameras/{camera_id}")
 async def ws_camera_stream(websocket: WebSocket, camera_id: int) -> None:
     token = websocket.query_params.get("token")
@@ -85,6 +110,10 @@ async def ws_camera_stream(websocket: WebSocket, camera_id: int) -> None:
     last_send_time = 0.0
     min_interval = 1.0 / max(1, ws_target_fps)
 
+    # Đăng ký là 1 viewer JPEG-WS -> đánh thức vòng capture/encode on-demand của camera (nếu
+    # đang nghỉ vì mọi người xem qua WebRTC). remove ở finally để camera quay lại nghỉ khi
+    # client fallback cuối cùng ngắt.
+    camera_manager.add_stream_viewer(camera_id)
     try:
         while True:
             now = asyncio.get_event_loop().time()
@@ -98,3 +127,5 @@ async def ws_camera_stream(websocket: WebSocket, camera_id: int) -> None:
             await asyncio.sleep(0.002)
     except WebSocketDisconnect:
         return
+    finally:
+        camera_manager.remove_stream_viewer(camera_id)

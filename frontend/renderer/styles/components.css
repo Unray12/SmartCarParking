@@ -92,7 +92,25 @@ button.ghost:hover { background: #1c2b45; border-color: #38507a; color: #fff; }
   aspect-ratio: 16 / 7; display: grid; place-items: center;
 }
 .focus-stage canvas { width: 100%; height: 100%; object-fit: contain; }
+.focus-stage video { width: 100%; height: 100%; object-fit: contain; display: none; }
 .focus-stage .placeholder { position: absolute; color: #6d859f; }
+
+/* <video> WebRTC dùng chung: mặc định ẩn, chỉ hiện khi peer 'connected' (đổi qua .is-live).
+   Khi WebRTC live thì ẩn canvas fallback tương ứng. */
+.stream-video { display: none; }
+.stream-video.is-live { display: block; }
+
+/* Badge góc khung cho biết luồng đang chạy bằng gì: WebRTC (xanh) hay JPEG fallback (vàng).
+   stream.js set data-stream-mode lên element cha của <video> (.preview / .focus-stage). */
+[data-stream-mode]::after {
+  position: absolute; top: 6px; right: 6px; z-index: 3; pointer-events: none;
+  font-size: 0.6rem; font-weight: 800; letter-spacing: 0.05em;
+  padding: 2px 7px; border-radius: 6px; line-height: 1.4;
+}
+[data-stream-mode="webrtc"]::after { content: 'WebRTC'; background: rgba(34, 197, 94, 0.88); color: #04140a; }
+[data-stream-mode="jpeg"]::after { content: 'JPEG'; background: rgba(234, 179, 8, 0.9); color: #1a1400; }
+[data-stream-mode="connecting"]::after { content: 'Đang kết nối…'; background: rgba(100, 116, 139, 0.85); color: #fff; }
+[data-stream-mode="error"]::after { content: 'Mất kết nối – thử lại…'; background: rgba(239, 68, 68, 0.9); color: #fff; }
 
 /* ============================ AI live test ============================ */
 .ai-live-controls { display: flex; gap: 8px; margin-top: 8px; }
@@ -117,6 +135,7 @@ button.ghost:hover { background: #1c2b45; border-color: #38507a; color: #fff; }
 .camera-head .status { color: var(--muted); font-size: 0.8rem; }
 .preview { aspect-ratio: 16/9; background: #050b11; display: grid; place-items: center; position: relative; }
 .preview canvas { width: 100%; height: 100%; object-fit: cover; }
+.preview video { width: 100%; height: 100%; object-fit: cover; }
 .preview .placeholder { color: #627a95; font-size: 0.84rem; position: absolute; }
 .camera-actions { padding: 11px 13px; border-top: 1px solid var(--line-soft); display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .url { color: var(--muted); font-size: 0.74rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 140px; }

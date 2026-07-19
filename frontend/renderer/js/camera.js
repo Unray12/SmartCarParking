@@ -1,9 +1,11 @@
 import { wsCameraUrl } from './api.js';
+import { createStreamSession } from './stream.js';
 
 export function createCameraModule({ els, state, api, notify, onCameraMutated, onCamerasUpdated }) {
   const cameraViews = new Map();
   const focusRuntime = {
     cameraId: null,
+    session: null,
     ws: null,
     pendingFrame: null,
     decoding: false
@@ -14,19 +16,32 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     return state.cameras.find((cam) => cam.id === cameraId) || null;
   }
 
-  function closeFocusSocket() {
-    if (!focusRuntime.ws) return;
+  // Đóng luồng JPEG-WS fallback (không đụng session/WebRTC).
+  function closeFocusJpeg() {
     if (focusAnimFrame) {
       cancelAnimationFrame(focusAnimFrame);
       focusAnimFrame = null;
     }
-    focusRuntime.ws.onmessage = null;
-    focusRuntime.ws.onclose = null;
-    focusRuntime.ws.onerror = null;
-    focusRuntime.ws.close();
-    focusRuntime.ws = null;
-    focusRuntime.cameraId = null;
+    if (focusRuntime.ws) {
+      focusRuntime.ws.onmessage = null;
+      focusRuntime.ws.onclose = null;
+      focusRuntime.ws.onerror = null;
+      focusRuntime.ws.close();
+      focusRuntime.ws = null;
+    }
     focusRuntime.pendingFrame = null;
+  }
+
+  // Đóng cả phiên hiển thị camera phóng lớn (WebRTC + JPEG fallback).
+  function closeFocusSocket() {
+    if (focusRuntime.session) {
+      focusRuntime.session.stop();
+      focusRuntime.session = null;
+    }
+    closeFocusJpeg();
+    focusRuntime.cameraId = null;
+    if (els.focusVideo) els.focusVideo.classList.remove('is-live');
+    if (els.focusCanvas) els.focusCanvas.style.display = '';
   }
 
   function renderFocusHeader() {
@@ -70,17 +85,10 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     }
   }
 
-  function openFocusSocket(cameraId) {
-    if (focusRuntime.ws && focusRuntime.cameraId === cameraId) return;
-
-    closeFocusSocket();
-    const camera = findCameraById(cameraId);
-    if (!camera || !camera.enabled || state.currentView !== 'cameras') {
-      els.focusPlaceholder.textContent = camera && !camera.enabled ? 'Camera đang tắt' : 'Đang chờ camera...';
-      els.focusPlaceholder.style.display = 'block';
-      return;
-    }
-
+  // Fallback JPEG-over-WebSocket cho camera phóng lớn (được stream.js gọi khi WebRTC không
+  // khả dụng/lỗi). Tự mở lại nếu WS rớt bất ngờ trong lúc vẫn đang phóng lớn.
+  function openFocusJpeg(cameraId) {
+    closeFocusJpeg();
     const ws = new WebSocket(wsCameraUrl(cameraId));
     ws.binaryType = 'arraybuffer';
 
@@ -93,12 +101,46 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       const stillFocused = state.focusedCameraId === cameraId;
       const latest = findCameraById(cameraId);
       if (stillFocused && latest && latest.enabled && state.currentView === 'cameras') {
-        setTimeout(() => openFocusSocket(cameraId), 1000);
+        setTimeout(() => {
+          if (state.focusedCameraId === cameraId) openFocusJpeg(cameraId);
+        }, 1000);
       }
     };
 
     focusRuntime.ws = ws;
+  }
+
+  function openFocusSocket(cameraId) {
+    if (focusRuntime.session && focusRuntime.cameraId === cameraId) return;
+
+    closeFocusSocket();
+    const camera = findCameraById(cameraId);
+    if (!camera || !camera.enabled || state.currentView !== 'cameras') {
+      els.focusPlaceholder.textContent = camera && !camera.enabled ? 'Camera đang tắt' : 'Đang chờ camera...';
+      els.focusPlaceholder.style.display = 'block';
+      return;
+    }
+
     focusRuntime.cameraId = cameraId;
+    focusRuntime.session = createStreamSession({
+      cameraId,
+      video: els.focusVideo,
+      canvas: els.focusCanvas,
+      showVideo: () => {
+        els.focusVideo.classList.add('is-live');
+        els.focusCanvas.style.display = 'none';
+        els.focusPlaceholder.style.display = 'none';
+      },
+      showCanvas: () => {
+        els.focusVideo.classList.remove('is-live');
+        els.focusCanvas.style.display = '';
+      },
+      startJpeg: () => {
+        openFocusJpeg(cameraId);
+        return { stop: closeFocusJpeg };
+      }
+    });
+    focusRuntime.session.start();
   }
 
   function syncFocusedCamera() {
@@ -194,6 +236,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
         <button class="toggle"></button>
       </div>
       <div class="preview">
+        <video class="stream-video" autoplay muted playsinline></video>
         <canvas></canvas>
         <span class="placeholder">Đang chờ video...</span>
       </div>
@@ -215,6 +258,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     const editBtn = card.querySelector('.mini-btn.edit');
     const deleteBtn = card.querySelector('.mini-btn.danger');
     const canvas = card.querySelector('canvas');
+    const video = card.querySelector('video');
     const placeholder = card.querySelector('.placeholder');
     const ctx = canvas.getContext('2d');
 
@@ -222,6 +266,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     canvas.height = 720;
 
     const local = {
+      session: null,
       ws: null,
       pendingFrame: null,
       decoding: false,
@@ -261,7 +306,11 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       }
     }
 
-    function closeSocket() {
+    function closeCardJpeg() {
+      if (animFrame) {
+        cancelAnimationFrame(animFrame);
+        animFrame = null;
+      }
       if (!local.ws) return;
       local.ws.onmessage = null;
       local.ws.onclose = null;
@@ -270,10 +319,10 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       local.ws = null;
     }
 
-    function openSocket(cameraId) {
-      if (local.paused || local.pausedForFocus || state.currentView !== 'cameras') return;
-
-      closeSocket();
+    // Fallback JPEG-over-WebSocket vẽ lên canvas (stream.js gọi khi WebRTC không khả dụng
+    // /lỗi). Tự mở lại nếu WS rớt bất ngờ trong lúc luồng vẫn đang chạy.
+    function openCardJpeg(cameraId) {
+      closeCardJpeg();
       const ws = new WebSocket(wsCameraUrl(cameraId));
       ws.binaryType = 'arraybuffer';
 
@@ -283,12 +332,51 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       };
 
       ws.onclose = () => {
-        if (camera.enabled && !local.paused && !local.pausedForFocus && state.currentView === 'cameras') {
-          setTimeout(() => openSocket(cameraId), 1000);
+        if (camera.enabled && !local.paused && !local.pausedForFocus && state.currentView === 'cameras' && local.session) {
+          setTimeout(() => {
+            if (local.session) openCardJpeg(cameraId);
+          }, 1000);
         }
       };
 
       local.ws = ws;
+    }
+
+    // Luồng hiển thị card: ưu tiên WebRTC, fallback JPEG. local.session != null nghĩa là
+    // đang chạy (thay cho local.ws trước đây).
+    function startCardStream() {
+      if (local.paused || local.pausedForFocus || state.currentView !== 'cameras') return;
+      if (!camera.enabled || local.session) return;
+
+      local.session = createStreamSession({
+        cameraId: camera.id,
+        video,
+        canvas,
+        showVideo: () => {
+          video.classList.add('is-live');
+          canvas.style.display = 'none';
+          placeholder.style.display = 'none';
+        },
+        showCanvas: () => {
+          video.classList.remove('is-live');
+          canvas.style.display = '';
+        },
+        startJpeg: () => {
+          openCardJpeg(camera.id);
+          return { stop: closeCardJpeg };
+        }
+      });
+      local.session.start();
+    }
+
+    function stopCardStream() {
+      if (local.session) {
+        local.session.stop();
+        local.session = null;
+      }
+      closeCardJpeg();
+      video.classList.remove('is-live');
+      canvas.style.display = '';
     }
 
     async function toggleCamera() {
@@ -337,7 +425,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
 
     renderHeader(camera);
     if (camera.enabled) {
-      openSocket(camera.id);
+      startCardStream();
     } else {
       placeholder.textContent = 'Camera đang tắt';
     }
@@ -349,41 +437,41 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
         renderHeader(camera);
 
         if (!camera.enabled) {
-          closeSocket();
+          stopCardStream();
           placeholder.style.display = 'block';
           placeholder.textContent = 'Camera đang tắt';
           return;
         }
 
-        if (!local.paused && !local.pausedForFocus && state.currentView === 'cameras' && !local.ws) {
-          openSocket(camera.id);
+        if (!local.paused && !local.pausedForFocus && state.currentView === 'cameras' && !local.session) {
+          startCardStream();
         }
       },
       pause() {
         local.paused = true;
-        closeSocket();
+        stopCardStream();
       },
       resume() {
         local.paused = false;
-        if (camera.enabled && !local.pausedForFocus && !local.ws) {
-          openSocket(camera.id);
+        if (camera.enabled && !local.pausedForFocus && !local.session) {
+          startCardStream();
         }
       },
       setFocusStreamPaused(pausedForFocus) {
         local.pausedForFocus = pausedForFocus;
         if (pausedForFocus) {
-          closeSocket();
+          stopCardStream();
           return;
         }
-        if (!local.paused && camera.enabled && state.currentView === 'cameras' && !local.ws) {
-          openSocket(camera.id);
+        if (!local.paused && camera.enabled && state.currentView === 'cameras' && !local.session) {
+          startCardStream();
         }
       },
       setFocused(isFocused) {
         card.classList.toggle('is-focused', isFocused);
       },
       destroy() {
-        closeSocket();
+        stopCardStream();
         card.remove();
       }
     };

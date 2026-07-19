@@ -2,18 +2,20 @@
 import { api, wsCameraUrl } from '../api.js';
 import { appState } from '../state.js';
 import { els } from '../dom.js';
+import { createStreamSession } from '../stream.js';
 import { notify, fmtDate, absoluteApiUrl, absoluteApiUrlNoCache, cameraNameById, occClass, occRate, escapeHtml } from '../ui.js';
 
 const lotDetailState = {
   selectedLotId: null,
   currentLot: null,
-  entryWs: null,
-  exitWs: null,
-  sharedWs: null,
-  // Theo dõi camera mỗi socket đang stream để poll định kỳ không tear-down WS (chống chớp khung).
+  // Mỗi hướng 1 phiên hiển thị độc lập (ưu tiên WebRTC, fallback JPEG). Trường hợp camera
+  // vào == camera ra được xử lý đơn giản bằng 2 phiên cùng cameraId (MediaMTX tự fan-out),
+  // thay cho cơ chế 1 socket vẽ 2 canvas trước đây.
+  entrySession: null,
+  exitSession: null,
+  // Theo dõi camera mỗi hướng đang stream để poll định kỳ không tear-down (chống chớp khung).
   streamEntryCamId: null,
-  streamExitCamId: null,
-  streamSharedCamId: null
+  streamExitCamId: null
 };
 const captureStatusTimers = { entry: null, exit: null };
 // Dedup key riêng cho pulse "ok" (quẹt thành công) và pulse "warn" (quẹt bị từ chối) -
@@ -175,16 +177,6 @@ export async function loadParkingLots() {
 }
 
 // ---- Live streams trong chi tiết bãi ----
-function closeLotWs(ws) {
-  if (!ws) return null;
-  // Gỡ handler trước khi close để không nháy placeholder "Mất kết nối camera".
-  ws.onmessage = null;
-  ws.onclose = null;
-  ws.onerror = null;
-  ws.close();
-  return null;
-}
-
 function setLotPlaceholder(kind, text) {
   if (kind === 'entry') {
     els.lotEntryPlaceholder.textContent = text;
@@ -195,24 +187,25 @@ function setLotPlaceholder(kind, text) {
   }
 }
 
-function openLotStream(kind, cameraId) {
-  const canvas = kind === 'entry' ? els.lotEntryCanvas : els.lotExitCanvas;
-  const placeholder = kind === 'entry' ? els.lotEntryPlaceholder : els.lotExitPlaceholder;
+function lotEls(kind) {
+  return kind === 'entry'
+    ? { video: els.lotEntryVideo, canvas: els.lotEntryCanvas, placeholder: els.lotEntryPlaceholder }
+    : { video: els.lotExitVideo, canvas: els.lotExitCanvas, placeholder: els.lotExitPlaceholder };
+}
+
+// Fallback JPEG-over-WebSocket cho 1 hướng, vẽ lên canvas tương ứng. Trả { stop }. Tự mở
+// lại nếu WS rớt trong lúc phiên vẫn đang chạy (stream.js không tự restart JPEG).
+function makeLotJpeg(kind, cameraId) {
+  const { canvas, placeholder } = lotEls(kind);
   const ctx = canvas.getContext('2d');
   canvas.width = 1280;
   canvas.height = 720;
 
-  if (!cameraId) {
-    setLotPlaceholder(kind, kind === 'entry' ? 'Chưa có camera vào' : 'Chưa có camera ra');
-    return;
-  }
-
   let pendingFrame = null;
   let decoding = false;
   let animFrameId = null;
-
-  const ws = new WebSocket(wsCameraUrl(cameraId));
-  ws.binaryType = 'arraybuffer';
+  let ws = null;
+  let stopped = false;
 
   async function consumeFrame() {
     animFrameId = null;
@@ -236,129 +229,98 @@ function openLotStream(kind, cameraId) {
     }
   }
 
-  ws.onmessage = (ev) => {
-    pendingFrame = ev.data;
-    if (!decoding && !animFrameId) {
-      animFrameId = requestAnimationFrame(() => consumeFrame().catch(console.error));
-    }
-  };
-
-  ws.onclose = () => {
-    pendingFrame = null;
-    if (animFrameId) {
-      cancelAnimationFrame(animFrameId);
-      animFrameId = null;
-    }
-    setLotPlaceholder(kind, 'Mất kết nối camera');
-  };
-
-  if (kind === 'entry') lotDetailState.entryWs = ws;
-  else lotDetailState.exitWs = ws;
-}
-
-function openSharedLotStream(cameraId) {
-  const entryCtx = els.lotEntryCanvas.getContext('2d');
-  const exitCtx = els.lotExitCanvas.getContext('2d');
-  els.lotEntryCanvas.width = 1280;
-  els.lotEntryCanvas.height = 720;
-  els.lotExitCanvas.width = 1280;
-  els.lotExitCanvas.height = 720;
-
-  let pendingFrame = null;
-  let decoding = false;
-  let animFrameId = null;
-
-  const ws = new WebSocket(wsCameraUrl(cameraId));
-  ws.binaryType = 'arraybuffer';
-
-  async function consumeFrame() {
-    animFrameId = null;
-    if (decoding) return;
-    decoding = true;
-
-    const frame = pendingFrame;
-    pendingFrame = null;
-
-    if (frame) {
-      const blob = new Blob([frame], { type: 'image/jpeg' });
-      const bmp = await createImageBitmap(blob);
-      els.lotEntryPlaceholder.style.display = 'none';
-      els.lotExitPlaceholder.style.display = 'none';
-      entryCtx.drawImage(bmp, 0, 0, els.lotEntryCanvas.width, els.lotEntryCanvas.height);
-      exitCtx.drawImage(bmp, 0, 0, els.lotExitCanvas.width, els.lotExitCanvas.height);
-      bmp.close();
-    }
-
-    decoding = false;
-    if (pendingFrame && !decoding) {
-      animFrameId = requestAnimationFrame(() => consumeFrame().catch(() => null));
-    }
+  function open() {
+    ws = new WebSocket(wsCameraUrl(cameraId));
+    ws.binaryType = 'arraybuffer';
+    ws.onmessage = (ev) => {
+      pendingFrame = ev.data;
+      if (!decoding && !animFrameId) {
+        animFrameId = requestAnimationFrame(() => consumeFrame().catch(console.error));
+      }
+    };
+    ws.onclose = () => {
+      if (stopped) return;
+      setLotPlaceholder(kind, 'Mất kết nối camera');
+      setTimeout(() => { if (!stopped) open(); }, 1000);
+    };
   }
 
-  ws.onmessage = (ev) => {
-    pendingFrame = ev.data;
-    if (!decoding && !animFrameId) {
-      animFrameId = requestAnimationFrame(() => consumeFrame().catch(() => null));
+  open();
+
+  return {
+    stop() {
+      stopped = true;
+      if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
+      if (ws) {
+        ws.onmessage = null;
+        ws.onclose = null;
+        ws.onerror = null;
+        ws.close();
+        ws = null;
+      }
     }
   };
+}
 
-  ws.onclose = () => {
-    if (animFrameId) {
-      cancelAnimationFrame(animFrameId);
-      animFrameId = null;
-    }
-    setLotPlaceholder('entry', 'Mất kết nối camera');
-    setLotPlaceholder('exit', 'Mất kết nối camera');
-  };
+function openLotKind(kind, cameraId) {
+  const { video, canvas, placeholder } = lotEls(kind);
+  canvas.width = 1280;
+  canvas.height = 720;
 
-  lotDetailState.sharedWs = ws;
+  if (!cameraId) {
+    setLotPlaceholder(kind, kind === 'entry' ? 'Chưa có camera vào' : 'Chưa có camera ra');
+    return null;
+  }
+
+  const session = createStreamSession({
+    cameraId,
+    video,
+    canvas,
+    showVideo: () => {
+      video.classList.add('is-live');
+      canvas.style.display = 'none';
+      placeholder.style.display = 'none';
+    },
+    showCanvas: () => {
+      video.classList.remove('is-live');
+      canvas.style.display = '';
+    },
+    startJpeg: () => makeLotJpeg(kind, cameraId)
+  });
+  session.start();
+  return session;
+}
+
+function resetLotVideo(kind) {
+  const { video, canvas } = lotEls(kind);
+  if (video) video.classList.remove('is-live');
+  if (canvas) canvas.style.display = '';
 }
 
 export function closeLotDetailStreams() {
-  lotDetailState.sharedWs = closeLotWs(lotDetailState.sharedWs);
-  lotDetailState.entryWs = closeLotWs(lotDetailState.entryWs);
-  lotDetailState.exitWs = closeLotWs(lotDetailState.exitWs);
+  if (lotDetailState.entrySession) { lotDetailState.entrySession.stop(); lotDetailState.entrySession = null; }
+  if (lotDetailState.exitSession) { lotDetailState.exitSession.stop(); lotDetailState.exitSession = null; }
+  resetLotVideo('entry');
+  resetLotVideo('exit');
   lotDetailState.streamEntryCamId = null;
   lotDetailState.streamExitCamId = null;
-  lotDetailState.streamSharedCamId = null;
 }
 
-// Chỉ (re)connect khi cấu hình camera đổi hoặc socket chết → tránh chớp khung khi poll.
+// Chỉ (re)tạo phiên khi cấu hình camera đổi → tránh chớp khung khi poll định kỳ. Mỗi phiên
+// tự lo reconnect (WebRTC hoặc JPEG fallback) nên không cần theo dõi liveness socket nữa.
 function ensureLotStreams(lot) {
   const entryCam = lot.entry_camera_id || null;
   const exitCam = lot.exit_camera_id || null;
-  const useShared = Boolean(entryCam && exitCam && entryCam === exitCam);
 
-  const wsAlive = (ws) =>
-    Boolean(ws) && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING);
-
-  if (useShared) {
-    const ok =
-      lotDetailState.streamSharedCamId === entryCam &&
-      wsAlive(lotDetailState.sharedWs) &&
-      !lotDetailState.entryWs &&
-      !lotDetailState.exitWs;
-    if (ok) return;
-  } else {
-    const entryOk = entryCam
-      ? lotDetailState.streamEntryCamId === entryCam && wsAlive(lotDetailState.entryWs)
-      : !lotDetailState.entryWs;
-    const exitOk = exitCam
-      ? lotDetailState.streamExitCamId === exitCam && wsAlive(lotDetailState.exitWs)
-      : !lotDetailState.exitWs;
-    if (entryOk && exitOk && !lotDetailState.sharedWs) return;
-  }
+  const entryOk = entryCam ? (lotDetailState.streamEntryCamId === entryCam && lotDetailState.entrySession) : !lotDetailState.entrySession;
+  const exitOk = exitCam ? (lotDetailState.streamExitCamId === exitCam && lotDetailState.exitSession) : !lotDetailState.exitSession;
+  if (entryOk && exitOk) return;
 
   closeLotDetailStreams();
-  if (useShared) {
-    openSharedLotStream(entryCam);
-    lotDetailState.streamSharedCamId = entryCam;
-  } else {
-    openLotStream('entry', entryCam);
-    openLotStream('exit', exitCam);
-    lotDetailState.streamEntryCamId = entryCam;
-    lotDetailState.streamExitCamId = exitCam;
-  }
+  lotDetailState.entrySession = openLotKind('entry', entryCam);
+  lotDetailState.exitSession = openLotKind('exit', exitCam);
+  lotDetailState.streamEntryCamId = entryCam;
+  lotDetailState.streamExitCamId = exitCam;
 }
 
 function renderLotDetailLogs(sessions) {

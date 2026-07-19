@@ -6,6 +6,7 @@ import time
 from queue import Empty, Full, Queue
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from urllib.parse import quote
 
 import cv2
 import numpy as np
@@ -14,6 +15,7 @@ from sqlalchemy import and_, select
 from app.core.config import get_settings
 from app.modules.cameras.model import Camera
 from app.modules.plates.model import PlateRead
+from app.services.mediamtx import MediaMTXClient
 from app.services.plate_recognizer import PlateDetection, PlateRecognizer, normalize_plate
 
 # OPENCV_FFMPEG_CAPTURE_OPTIONS là env var DÙNG CHUNG cho toàn process (mọi camera worker
@@ -37,6 +39,14 @@ class StreamConfig:
     enable_inference: bool = True
     # Xem comment ở core/config.py:Settings.stream_periodic_reconnect_seconds.
     periodic_reconnect_seconds: int = 1800
+    # ==== WebRTC/MediaMTX (xem core/config.py) ====
+    # Khi bật: camera nguồn rtsp:// được đăng ký path trên MediaMTX (browser xem qua WebRTC),
+    # và AI worker + fallback JPEG đọc lại từ RTSP re-publish của MediaMTX thay vì nối thẳng
+    # camera -> camera chỉ chịu đúng 1 kết nối. Tắt: mọi thứ chạy như cũ (nối thẳng camera).
+    webrtc_enabled: bool = False
+    mediamtx_api_url: str = ""
+    mediamtx_rtsp_base: str = ""
+    internal_token: str = ""
 
 
 class CameraWorker:
@@ -53,6 +63,11 @@ class CameraWorker:
         self._recognizer = recognizer
         self._config = config
         self._on_detection = on_detection
+        # URL mà vòng capture thực sự mở: mặc định = source_url (nối thẳng camera). Khi bật
+        # WebRTC và camera là rtsp:// thật, đọc lại từ RTSP re-publish của MediaMTX (path
+        # cam<id>) - camera nhờ đó chỉ chịu 1 kết nối duy nhất từ MediaMTX. source_url gốc
+        # vẫn giữ nguyên để đăng ký path và để hiển thị/nhận diện loại nguồn.
+        self._capture_url = self._resolve_capture_url()
 
         self._lock = threading.Lock()
         self._frame_lock = threading.Lock()
@@ -66,6 +81,48 @@ class CameraWorker:
         self._encode_thread: threading.Thread | None = None
         self._infer_thread: threading.Thread | None = None
         self._infer_queue: Queue[np.ndarray] = Queue(maxsize=1)
+        # Đếm số client đang xem qua JPEG-WS (fallback). ON-DEMAND: khi = 0 và AI tắt, vòng
+        # capture + encode NGHỈ hẳn (không kéo camera, không nén JPEG) - viewer WebRTC lấy
+        # hình thẳng từ MediaMTX nên không mở JPEG-WS, backend nhờ đó không tốn CPU giải mã
+        # H.264 + nén JPEG cho đường fallback không ai dùng. Xem _wants_capture/_wants_encode.
+        self._viewers = 0
+        self._viewers_lock = threading.Lock()
+
+    def add_viewer(self) -> None:
+        with self._viewers_lock:
+            self._viewers += 1
+
+    def remove_viewer(self) -> None:
+        with self._viewers_lock:
+            if self._viewers > 0:
+                self._viewers -= 1
+
+    def _viewer_count(self) -> int:
+        with self._viewers_lock:
+            return self._viewers
+
+    def _wants_capture(self) -> bool:
+        # Cần kéo frame (và giữ kết nối camera) khi có người xem JPEG-WS HOẶC bật AI inference.
+        return self._config.enable_inference or self._viewer_count() > 0
+
+    def _wants_encode(self) -> bool:
+        # JPEG chỉ phục vụ client JPEG-WS - không ai xem thì không nén.
+        return self._viewer_count() > 0
+
+    def _uses_mediamtx(self) -> bool:
+        return bool(
+            self._config.webrtc_enabled
+            and self._config.mediamtx_rtsp_base
+            and self.source_url.lower().startswith("rtsp://")
+        )
+
+    def _resolve_capture_url(self) -> str:
+        if not self._uses_mediamtx():
+            return self.source_url
+        base = self._config.mediamtx_rtsp_base.rstrip("/")
+        name = MediaMTXClient.path_name(self.camera_id)
+        token = quote(self._config.internal_token or "", safe="")
+        return f"{base}/{name}?token={token}"
 
     def start(self) -> None:
         if self._capture_thread and self._capture_thread.is_alive():
@@ -109,7 +166,10 @@ class CameraWorker:
 
     def _open_capture(self):
         settings = get_settings()
-        source = self.source_url
+        # Mở URL capture thực tế (có thể là RTSP re-publish của MediaMTX thay vì camera trực
+        # tiếp - xem _resolve_capture_url). Cả 2 đều là rtsp:// nên nhánh set option bên dưới
+        # áp dụng như nhau.
+        source = self._capture_url
         # Set/dọn env var RỒI mở capture trong CÙNG 1 lần giữ khoá - bắt buộc phải atomic
         # với nhau, vì 2 worker thread (ví dụ 1 camera RTSP đang retry liên tục + 1 camera
         # HTTP khác đang mở lại) có thể tranh nhau đọc/ghi env var process-wide này ở tần
@@ -181,8 +241,30 @@ class CameraWorker:
         read_failures = 0
         reconnect_backoff = 0.15
         cap_opened_at = 0.0
+        was_capturing = False
 
         while self._running.is_set():
+            # ON-DEMAND: không có người xem JPEG và AI tắt -> nhả capture, camera ngừng bị
+            # kéo (MediaMTX sourceOnDemand tự ngắt kết nối tới camera). Poll nhẹ chờ nhu cầu
+            # quay lại (1 client fallback JPEG kết nối, hoặc AI được bật). Khi vừa rời trạng
+            # thái đang chạy, dọn frame cũ để lần xem lại không thấy/không nhận diện nhầm
+            # khung hình cũ cách đây lâu.
+            if not self._wants_capture():
+                if cap is not None:
+                    cap.release()
+                    cap = None
+                if was_capturing:
+                    with self._frame_lock:
+                        self._latest_frame_bgr = None
+                    with self._lock:
+                        self._latest_jpeg = None
+                    was_capturing = False
+                read_failures = 0
+                reconnect_backoff = 0.15
+                time.sleep(0.1)
+                continue
+
+            was_capturing = True
             loop_started = time.time()
 
             if cap is None or not cap.isOpened():
@@ -276,6 +358,11 @@ class CameraWorker:
     def _encode_loop(self) -> None:
         last_encoded_seq = 0
         while self._running.is_set():
+            # ON-DEMAND: không ai xem JPEG-WS thì không nén (viewer WebRTC không dùng đường này).
+            if not self._wants_encode():
+                time.sleep(0.05)
+                continue
+
             frame: np.ndarray | None = None
             current_seq = 0
             with self._frame_lock:
@@ -352,6 +439,17 @@ class CameraStreamManager:
         self._config = config
         self._workers: dict[int, CameraWorker] = {}
         self._workers_lock = threading.Lock()
+        # Client quản lý path MediaMTX - chỉ tạo khi bật WebRTC và có địa chỉ Control API.
+        # Tắt WebRTC (hoặc chạy bare-metal không có MediaMTX) -> None, mọi thao tác path
+        # được bỏ qua, camera nối thẳng như kiến trúc cũ.
+        self._mediamtx: MediaMTXClient | None = (
+            MediaMTXClient(config.mediamtx_api_url)
+            if config.webrtc_enabled and config.mediamtx_api_url
+            else None
+        )
+
+    def _is_rtsp(self, source_url: str) -> bool:
+        return source_url.lower().startswith("rtsp://")
 
     @property
     def recognizer_name(self) -> str:
@@ -401,13 +499,42 @@ class CameraStreamManager:
             return None, 0.0, 0
         return worker.latest_packet()
 
+    def add_stream_viewer(self, camera_id: int) -> None:
+        # WS controller gọi khi 1 client JPEG-WS kết nối -> đánh thức vòng capture/encode
+        # on-demand cho camera này.
+        with self._workers_lock:
+            worker = self._workers.get(camera_id)
+        if worker:
+            worker.add_viewer()
+
+    def remove_stream_viewer(self, camera_id: int) -> None:
+        with self._workers_lock:
+            worker = self._workers.get(camera_id)
+        if worker:
+            worker.remove_viewer()
+
     def test_camera_ai(self, camera_id: int) -> tuple[bool, list[PlateDetection], np.ndarray | None]:
         with self._workers_lock:
             worker = self._workers.get(camera_id)
         if not worker:
             return False, [], None
 
-        frame_bgr = worker.latest_frame_bgr()
+        # Với on-demand, khi không có viewer JPEG nào và AI tắt thì capture đang NGHỈ ->
+        # chưa có frame. Tạm đăng ký 1 viewer để đánh thức capture rồi chờ frame mới nhất
+        # (AI live test ở FE vốn cũng mở sẵn 1 JPEG-WS nên thường có frame ngay, đây là lưới
+        # an toàn cho lệnh test đứng một mình). Luôn remove_viewer ở finally để không kẹt.
+        worker.add_viewer()
+        try:
+            frame_bgr = None
+            deadline = time.time() + 5.0
+            while time.time() < deadline:
+                frame_bgr = worker.latest_frame_bgr()
+                if frame_bgr is not None:
+                    break
+                time.sleep(0.05)
+        finally:
+            worker.remove_viewer()
+
         if frame_bgr is None:
             return False, [], None
 
@@ -415,6 +542,11 @@ class CameraStreamManager:
         return True, detections, frame_bgr
 
     def _start_camera(self, camera_id: int, source_url: str) -> None:
+        # Đăng ký path MediaMTX TRƯỚC khi worker mở capture: worker (và browser WebRTC) đọc
+        # từ path cam<id>, path phải tồn tại trước, nếu không worker mở fail rồi mới retry.
+        if self._mediamtx is not None and self._is_rtsp(source_url):
+            self._mediamtx.upsert_camera_path(camera_id, source_url)
+
         worker = CameraWorker(
             camera_id=camera_id,
             source_url=source_url,
@@ -435,6 +567,9 @@ class CameraStreamManager:
             worker = self._workers.pop(camera_id, None)
         if worker:
             worker.stop()
+        # Dọn path MediaMTX (idempotent - bỏ qua nếu vốn không có).
+        if self._mediamtx is not None:
+            self._mediamtx.remove_camera_path(camera_id)
 
     def _handle_plate_detections(self, camera_id: int, detections: list[PlateDetection]) -> None:
         now = datetime.utcnow()

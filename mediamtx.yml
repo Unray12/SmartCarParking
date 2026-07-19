@@ -1,0 +1,44 @@
+# Cấu hình MediaMTX cho SmartCarParking - vai trò: nhận RTSP từ camera Hikvision, đóng
+# gói lại thành WebRTC (KHÔNG giải mã/mã hóa lại) cho browser xem trễ thấp, đồng thời
+# phát lại RTSP nội bộ cho AI worker + fallback JPEG của backend đọc.
+#
+# Path (mỗi camera 1 path tên cam<id>) KHÔNG khai báo tĩnh ở đây - backend tự thêm/xoá
+# động qua Control API (:9997) mỗi khi camera được bật/tắt/xoá trên UI. Xem
+# backend/app/services/mediamtx.py.
+
+logLevel: info
+logDestinations: [stdout]
+
+# ---- Control API (chỉ backend trong docker network gọi - KHÔNG map cổng 9997 ra host) ----
+api: yes
+apiAddress: :9997
+
+# ---- Xác thực: mọi hành động (đọc WebRTC, đọc RTSP nội bộ, gọi Control API) đều được
+# MediaMTX POST sang backend kiểm tra. Backend chấp nhận JWT hợp lệ (browser) hoặc token
+# nội bộ (AI worker/fallback). Xem app/modules/streaming/controller.py::mediamtx_auth. ----
+authMethod: http
+authHTTPAddress: http://backend:8010/api/v1/streaming/mediamtx-auth
+
+# ---- RTSP: dùng cho (1) MediaMTX kéo nguồn từ camera, (2) phát lại nội bộ cho AI/fallback ----
+rtsp: yes
+rtspAddress: :8554
+# Camera Hikvision đã ép TCP ở phía backend; ép luôn TCP khi MediaMTX kéo nguồn cho ổn định
+# (UDP qua NAT Docker Desktop/Windows hay timeout ~30s).
+rtspTransports: [tcp]
+
+# ---- WebRTC (WHEP) cho browser ----
+webrtc: yes
+webrtcAddress: :8889
+# Gom toàn bộ ICE/UDP vào 1 cổng duy nhất -> chỉ cần expose 1 cổng UDP, dễ cấu hình firewall.
+webrtcLocalUDPAddress: :8189
+# webrtcAdditionalHosts KHÔNG đặt ở đây mà truyền qua env MTX_WEBRTCADDITIONALHOSTS trong
+# docker-compose.yml (= ${MEDIAMTX_WEBRTC_HOST}) - BẮT BUỘC là IP LAN thật của server khi
+# browser ở máy khác, vì trong container IP interface là IP docker nội bộ browser không tới
+# được, phải quảng bá host thật này trong ICE candidate để trình duyệt kết nối UDP.
+
+# ---- Tắt các protocol không dùng cho gọn nhẹ (NUC yếu) ----
+rtmp: no
+hls: no
+srt: no
+
+paths: {}

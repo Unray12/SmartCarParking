@@ -18,6 +18,26 @@ services:
       timeout: 5s
       retries: 10
 
+  # Media server: nhận RTSP từ camera, đóng gói lại thành WebRTC (KHÔNG re-encode) cho
+  # browser xem trễ thấp; đồng thời phát lại RTSP nội bộ cho AI worker + fallback JPEG của
+  # backend. Path (cam<id>) do backend tự thêm/xoá động qua Control API - xem services/mediamtx.py.
+  mediamtx:
+    image: bluenviron/mediamtx:latest
+    restart: unless-stopped
+    environment:
+      # Quảng bá host thật trong ICE candidate để browser (kể cả máy khác trong LAN) kết nối
+      # được UDP. PHẢI là IP LAN của máy chạy Docker khi xem từ máy khác (xem .env).
+      MTX_WEBRTCADDITIONALHOSTS: ${MEDIAMTX_WEBRTC_HOST:-127.0.0.1}
+    volumes:
+      - ./mediamtx.yml:/mediamtx.yml:ro
+    ports:
+      # WHEP signaling (HTTP) - browser POST SDP offer tới đây.
+      - "${MEDIAMTX_WEBRTC_PORT:-8889}:8889"
+      # ICE/UDP mux - media WebRTC thật đi qua cổng này (browser <-> MediaMTX trực tiếp).
+      - "${MEDIAMTX_WEBRTC_UDP_PORT:-8189}:8189/udp"
+      # LƯU Ý: KHÔNG map cổng 9997 (Control API) ra host - chỉ backend trong docker network
+      # được phép quản lý path. Cổng 8554 (RTSP re-publish) cũng chỉ dùng nội bộ.
+
   backend:
     build:
       context: .
@@ -26,6 +46,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      mediamtx:
+        condition: service_started
     # Nạp TOÀN BỘ biến trong .env (root) thẳng vào container lúc chạy - không
     # build/bake vào image, không đụng backend/.env. Đây là nguồn config DUY NHẤT
     # cho app khi chạy qua Docker (xem backend/app/core/config.py để đối chiếu tên biến).

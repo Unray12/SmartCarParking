@@ -70,6 +70,25 @@ class Settings(BaseSettings):
     # reconnect chỉ xảy ra khi grab()/retrieve() thất bại thật sự - một stream "vẫn sống
     # nhưng đang trễ dần" không bao giờ tự trigger việc này. 0 = tắt cơ chế này.
     stream_periodic_reconnect_seconds: int = 1800
+
+    # ==== WebRTC qua MediaMTX (kiến trúc mới: RTSP -> MediaMTX -> WebRTC -> browser) ====
+    # Bật đường hiển thị WebRTC. Browser lấy H.264 gốc từ MediaMTX (không re-encode JPEG),
+    # decode bằng phần cứng -> trễ thấp hơn hẳn đường JPEG-over-WS cũ (vẫn giữ làm fallback).
+    stream_webrtc_enabled: bool = True
+    # URL Control API của MediaMTX (chỉ backend gọi, trong docker network - KHÔNG expose ra
+    # host). Backend dùng để thêm/xoá path động mỗi khi camera bật/tắt/xoá.
+    mediamtx_api_url: str = "http://mediamtx:9997"
+    # Địa chỉ RTSP nội bộ MediaMTX phát lại (re-publish) - AI worker & fallback JPEG đọc từ
+    # đây thay vì nối thẳng camera, để camera chỉ chịu DUY NHẤT 1 kết nối (từ MediaMTX).
+    mediamtx_rtsp_base: str = "rtsp://mediamtx:8554"
+    # Host:port WHEP mà BROWSER truy cập trực tiếp (phải reachable từ máy client). Để trống
+    # => frontend tự suy ra từ window.location.hostname + cổng mặc định 8889. Chỉ set khi
+    # MediaMTX nằm sau reverse-proxy/tên miền khác.
+    mediamtx_webrtc_public_base: str = ""
+    # Token nội bộ để AI worker/fallback đọc RTSP re-publish qua auth của MediaMTX (endpoint
+    # /streaming/mediamtx-auth chấp nhận token này HOẶC JWT hợp lệ). Đổi ở production.
+    stream_internal_token: str = "CHANGE_ME_internal_stream_token"
+
     ai_models_dir: str = "models_store"
     snapshot_store_dir: str = "snapshots_store"
 

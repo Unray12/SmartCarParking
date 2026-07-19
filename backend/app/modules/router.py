@@ -14,6 +14,7 @@ from app.modules.parking_lots.controller import router as parking_lots_router
 from app.modules.plates.controller import router as plates_router
 from app.modules.rfid.controller import router as rfid_router
 from app.modules.sessions.controller import router as sessions_router
+from app.modules.streaming.controller import router as streaming_router
 
 # Dependency bảo vệ toàn bộ API nghiệp vụ bằng JWT Bearer token.
 _auth = [Depends(get_current_user)]
@@ -27,6 +28,9 @@ api_v1 = APIRouter(prefix="/api/v1")
 # get_current_user, snapshot files bảo vệ bằng get_current_user_flexible (?token=)).
 api_v1.include_router(auth_router)
 api_v1.include_router(snapshot_files_router)  # serve ảnh (img/<a> không gửi được header)
+# MediaMTX gọi server-to-server để xác thực read/publish - tự bảo vệ bằng token trong query
+# (JWT hợp lệ hoặc token nội bộ), không gắn được Bearer nên để ngoài nhóm _auth.
+api_v1.include_router(streaming_router)
 
 # Protected (yêu cầu Bearer token)
 api_v1.include_router(cameras_router, dependencies=_auth)

@@ -33,6 +33,23 @@ export function wsCameraUrl(cameraId) {
   return token ? `${base}?token=${encodeURIComponent(token)}` : base;
 }
 
+// Cổng WebRTC (WHEP) của MediaMTX expose trên host - browser POST SDP offer thẳng tới đây.
+// Có thể override qua config.js (window.__APP_CONFIG__.WEBRTC_BASE) khi đứng sau reverse-proxy.
+const DEFAULT_WEBRTC_PORT = 8889;
+
+// Dựng URL WHEP đầy đủ từ info do GET /api/v1/cameras/{id}/webrtc trả về. public_base ưu
+// tiên (khi backend cấu hình sẵn); nếu rỗng thì suy ra từ host đang truy cập + cổng mặc
+// định. Token JWT gắn qua query vì fetch WHEP cross-origin (cổng 8889) và MediaMTX xác thực
+// bằng token trong query (browser không tự gắn Authorization cho POST cross-origin đơn giản).
+export function buildWhepUrl(info) {
+  if (!info || !info.path) return null;
+  const configured = window.__APP_CONFIG__?.WEBRTC_BASE;
+  const base = (info.public_base || configured || `${window.location.protocol}//${window.location.hostname || '127.0.0.1'}:${DEFAULT_WEBRTC_PORT}`).replace(/\/+$/, '');
+  const token = getToken();
+  const suffix = token ? `?token=${encodeURIComponent(token)}` : '';
+  return `${base}/${info.path}/whep${suffix}`;
+}
+
 function isPublicAuthPath(path) {
   return path.includes('/auth/login') || path.includes('/auth/reset-password');
 }

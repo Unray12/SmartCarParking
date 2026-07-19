@@ -90,6 +90,10 @@ async def lifespan(app: FastAPI):
         plate_dedupe_seconds=settings.stream_plate_dedupe_seconds,
         enable_inference=settings.stream_enable_inference,
         periodic_reconnect_seconds=settings.stream_periodic_reconnect_seconds,
+        webrtc_enabled=settings.stream_webrtc_enabled,
+        mediamtx_api_url=settings.mediamtx_api_url,
+        mediamtx_rtsp_base=settings.mediamtx_rtsp_base,
+        internal_token=settings.stream_internal_token,
     )
 
     camera_manager = CameraStreamManager(

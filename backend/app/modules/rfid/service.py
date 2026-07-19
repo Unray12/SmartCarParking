@@ -150,11 +150,20 @@ def _capture_snapshot(
             frame_bytes = jpeg.tobytes()
 
     if not frame_bytes and camera_manager is not None:
-        for _ in range(5):
-            frame_bytes, _ = camera_manager.get_latest_frame(camera_id)
-            if frame_bytes:
-                break
-            time.sleep(0.08)
+        # Với capture on-demand, khi không ai xem live thì vòng capture của camera đang NGHỈ
+        # -> chưa có frame sẵn. Đăng ký tạm 1 viewer để đánh thức pipeline (đọc qua MediaMTX,
+        # giữ nguyên 1 kết nối tới camera) rồi chờ frame mới nhất, thay vì để rơi xuống nhánh
+        # mở RTSP trực tiếp bên dưới (cold open chậm + nối thẳng camera thành 2 kết nối).
+        camera_manager.add_stream_viewer(camera_id)
+        try:
+            deadline = time.time() + 3.0
+            while time.time() < deadline:
+                frame_bytes, _ = camera_manager.get_latest_frame(camera_id)
+                if frame_bytes:
+                    break
+                time.sleep(0.08)
+        finally:
+            camera_manager.remove_stream_viewer(camera_id)
 
     if not frame_bytes:
         camera = db.get(Camera, camera_id)

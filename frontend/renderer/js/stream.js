@@ -24,6 +24,7 @@ export function createStreamSession({
   showCanvas,
   startJpeg,
   stopJpeg,
+  onMode,
   connectTimeoutMs = 6000,
   retryMs = 3000
 }) {
@@ -33,10 +34,13 @@ export function createStreamSession({
   let connectTimer = null;
   let retryTimer = null;
 
-  // Gắn mode hiển thị vào element cha của <video> (.preview / .focus-stage) để CSS vẽ badge
-  // góc khung: 'connecting' | 'webrtc' (xanh) | 'jpeg' (vàng) | 'error' (đỏ). Chỉ 1 attribute
-  // + CSS dùng chung, không cần thêm element ở từng nơi gọi. Xoá khi dừng để badge biến mất.
+  // Báo trạng thái luồng: 'connecting' | 'webrtc' | 'jpeg' | 'error' | null (dừng).
+  //  - Nếu caller cấp onMode -> giao TOÀN QUYỀN render cho caller (vd hiện chip trên thanh
+  //    header thay vì overlay). Không đụng vào DOM ở đây.
+  //  - Không có onMode -> mặc định gắn data-stream-mode lên element cha của <video>
+  //    (.preview/.focus-stage) để CSS vẽ badge góc khung.
   function setMode(mode) {
+    if (onMode) { onMode(mode); return; }
     const host = video?.parentElement;
     if (!host) return;
     if (mode) host.dataset.streamMode = mode;

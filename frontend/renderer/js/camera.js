@@ -233,7 +233,10 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
           <div class="name"></div>
           <div class="status"></div>
         </div>
-        <button class="toggle"></button>
+        <div class="head-right">
+          <span class="stream-status mode-none"></span>
+          <button class="toggle"></button>
+        </div>
       </div>
       <div class="preview">
         <video class="stream-video" autoplay muted playsinline></video>
@@ -252,6 +255,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
 
     const nameEl = card.querySelector('.name');
     const statusEl = card.querySelector('.status');
+    const streamStatusEl = card.querySelector('.stream-status');
     const toggleBtn = card.querySelector('.toggle');
     const urlEl = card.querySelector('.url');
     const focusBtn = card.querySelector('.mini-btn.focus');
@@ -280,6 +284,19 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       urlEl.textContent = next.source_url;
       toggleBtn.textContent = next.enabled ? 'Đang bật' : 'Đang tắt';
       toggleBtn.className = `toggle ${next.enabled ? 'on' : ''}`;
+    }
+
+    // Chip trạng thái luồng trên thanh header (cùng hàng nút Đang bật/tắt) - thay cho badge
+    // overlay góc video. stream.js gọi qua onMode mỗi khi trạng thái đổi.
+    const STREAM_LABELS = {
+      connecting: 'Đang kết nối…',
+      webrtc: 'WebRTC',
+      jpeg: 'JPEG',
+      error: 'Mất kết nối'
+    };
+    function setStreamStatus(mode) {
+      streamStatusEl.className = `stream-status ${mode ? `mode-${mode}` : 'mode-none'}`;
+      streamStatusEl.textContent = mode ? (STREAM_LABELS[mode] || '') : '';
     }
 
     let animFrame = null;
@@ -364,7 +381,8 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
         startJpeg: () => {
           openCardJpeg(camera.id);
           return { stop: closeCardJpeg };
-        }
+        },
+        onMode: setStreamStatus
       });
       local.session.start();
     }
@@ -374,6 +392,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
         local.session.stop();
         local.session = null;
       }
+      setStreamStatus(null);
       closeCardJpeg();
       video.classList.remove('is-live');
       canvas.style.display = '';

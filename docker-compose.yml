@@ -26,7 +26,9 @@ services:
     restart: unless-stopped
     environment:
       # Quảng bá host thật trong ICE candidate để browser (kể cả máy khác trong LAN) kết nối
-      # được UDP. PHẢI là IP LAN của máy chạy Docker khi xem từ máy khác (xem .env).
+      # được UDP. PHẢI là IP LAN của máy chạy Docker khi xem từ máy khác. Hỗ trợ NHIỀU IP:
+      # đặt MEDIAMTX_WEBRTC_HOST="192.168.1.7,127.0.0.1" (phân tách dấu phẩy) trong .env -
+      # MediaMTX nhận list, browser tự chọn IP reachable. Xem comment trong .env.
       MTX_WEBRTCADDITIONALHOSTS: ${MEDIAMTX_WEBRTC_HOST:-127.0.0.1}
     volumes:
       - ./mediamtx.yml:/mediamtx.yml:ro

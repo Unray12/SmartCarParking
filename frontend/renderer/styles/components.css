@@ -133,6 +133,18 @@ button.ghost:hover { background: #1c2b45; border-color: #38507a; color: #fff; }
 .camera-head { display: flex; justify-content: space-between; align-items: center; padding: 11px 13px; border-bottom: 1px solid var(--line-soft); }
 .camera-head .name { font-weight: 700; }
 .camera-head .status { color: var(--muted); font-size: 0.8rem; }
+.camera-head .head-right { display: inline-flex; align-items: center; gap: 8px; }
+
+/* Chip trạng thái luồng trên header camera (cùng hàng nút Đang bật/tắt). Màu theo mode. */
+.stream-status {
+  font-size: 0.6rem; font-weight: 800; letter-spacing: 0.05em;
+  padding: 3px 8px; border-radius: 999px; white-space: nowrap; text-transform: uppercase;
+}
+.stream-status.mode-none { display: none; }
+.stream-status.mode-webrtc { background: rgba(34, 197, 94, 0.18); color: #34d399; }
+.stream-status.mode-jpeg { background: rgba(234, 179, 8, 0.18); color: #eab308; }
+.stream-status.mode-connecting { background: rgba(100, 116, 139, 0.22); color: #94a3b8; }
+.stream-status.mode-error { background: rgba(239, 68, 68, 0.18); color: #f87171; }
 .preview { aspect-ratio: 16/9; background: #050b11; display: grid; place-items: center; position: relative; }
 .preview canvas { width: 100%; height: 100%; object-fit: cover; }
 .preview video { width: 100%; height: 100%; object-fit: cover; }

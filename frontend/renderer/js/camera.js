@@ -5,6 +5,20 @@ import { loadNav, saveNav } from './state.js';
 
 export function createCameraModule({ els, state, api, notify, onCameraMutated, onCamerasUpdated }) {
   const cameraViews = new Map();
+
+  // Chỉ stream card đang HIỂN THỊ trong viewport. Khi nhiều camera, nếu stream hết cùng lúc
+  // thì browser phải decode N luồng H.264 + MediaMTX phải kéo N camera song song -> nặng &
+  // dễ giật. IntersectionObserver bật/tắt luồng theo card có nằm trong tầm nhìn hay không
+  // (rootMargin 200px = mở sớm 1 chút trước khi cuộn tới để không thấy khựng). Panel ẩn (đổi
+  // tab) cũng khiến card không-intersect -> tự dừng, khớp với pause/resume sẵn có.
+  const cardObserver = ('IntersectionObserver' in window)
+    ? new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          const view = cameraViews.get(Number(entry.target.dataset.id));
+          view?.setOffscreen(!entry.isIntersecting);
+        }
+      }, { root: null, rootMargin: '200px 0px', threshold: 0 })
+    : null;
   const focusRuntime = {
     cameraId: null,
     session: null,
@@ -282,7 +296,10 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       pendingFrame: null,
       decoding: false,
       paused: false,
-      pausedForFocus: false
+      pausedForFocus: false,
+      // Mặc định coi là ngoài màn hình khi có observer -> chờ observer báo mới stream (tránh
+      // spike bật hết rồi tắt). Không hỗ trợ observer -> false (giữ hành vi cũ: stream ngay).
+      offscreen: Boolean(cardObserver)
     };
 
     function renderHeader(next) {
@@ -361,7 +378,7 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     // Luồng hiển thị card: ưu tiên WebRTC, fallback JPEG. local.session != null nghĩa là
     // đang chạy (thay cho local.ws trước đây).
     function startCardStream() {
-      if (local.paused || local.pausedForFocus || state.currentView !== 'cameras') return;
+      if (local.paused || local.pausedForFocus || local.offscreen || state.currentView !== 'cameras') return;
       if (!camera.enabled || local.session) return;
 
       local.session = createStreamSession({
@@ -485,6 +502,17 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
           startCardStream();
         }
       },
+      // Observer báo card ra/vào viewport: ngoài tầm nhìn -> dừng luồng (nhẹ browser+MediaMTX),
+      // vào tầm nhìn -> mở lại nếu đủ điều kiện.
+      setOffscreen(off) {
+        if (local.offscreen === off) return;
+        local.offscreen = off;
+        if (off) {
+          stopCardStream();
+        } else {
+          startCardStream();
+        }
+      },
       setFocused(isFocused) {
         card.classList.toggle('is-focused', isFocused);
       },
@@ -511,10 +539,12 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
       const view = createCameraCard(camera);
       cameraViews.set(camera.id, view);
       els.cameraGrid.appendChild(view.card);
+      cardObserver?.observe(view.card);
     }
 
     for (const [id, view] of cameraViews.entries()) {
       if (!seen.has(id)) {
+        cardObserver?.unobserve(view.card);
         view.destroy();
         cameraViews.delete(id);
       }

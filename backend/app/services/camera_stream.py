@@ -130,10 +130,13 @@ class CameraWorker:
         self._running.set()
         self._capture_thread = threading.Thread(target=self._capture_loop, daemon=True, name=f"cam-capture-{self.camera_id}")
         self._encode_thread = threading.Thread(target=self._encode_loop, daemon=True, name=f"cam-encode-{self.camera_id}")
-        self._infer_thread = threading.Thread(target=self._infer_loop, daemon=True)
         self._capture_thread.start()
         self._encode_thread.start()
-        self._infer_thread.start()
+        # Infer thread CHỈ chạy khi bật AI - camera hiển thị thuần WebRTC (AI tắt) không cần,
+        # tránh 1 thread thừa + 1 vòng queue.get(timeout) mỗi camera (quan trọng khi nhiều cam).
+        if self._config.enable_inference:
+            self._infer_thread = threading.Thread(target=self._infer_loop, daemon=True, name=f"cam-infer-{self.camera_id}")
+            self._infer_thread.start()
 
     def stop(self) -> None:
         self._running.clear()
@@ -360,7 +363,9 @@ class CameraWorker:
         while self._running.is_set():
             # ON-DEMAND: không ai xem JPEG-WS thì không nén (viewer WebRTC không dùng đường này).
             if not self._wants_encode():
-                time.sleep(0.05)
+                # Không ai xem JPEG -> ngủ dài hơn (0.2s) để giảm churn khi có nhiều camera;
+                # độ trễ đánh thức chỉ ảnh hưởng lần đầu bật fallback/snapshot, chấp nhận được.
+                time.sleep(0.2)
                 continue
 
             frame: np.ndarray | None = None

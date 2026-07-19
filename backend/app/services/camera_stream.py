@@ -169,7 +169,11 @@ class CameraWorker:
         if w <= self._config.max_width:
             return frame
         ratio = self._config.max_width / float(w)
-        return cv2.resize(frame, (self._config.max_width, int(h * ratio)), interpolation=cv2.INTER_AREA)
+        # INTER_LINEAR thay vì INTER_AREA: rẻ hơn đáng kể trên CPU yếu (NUC) với chất
+        # lượng downscale gần như không khác biệt sau khi ảnh còn bị nén JPEG quality 82
+        # ngay sau đó - đổi vài ms CPU/frame lấy latency thấp hơn, tránh vòng capture bị
+        # chậm hơn tốc độ camera đẩy frame (nguyên nhân gây backlog tích lũy thật sự).
+        return cv2.resize(frame, (self._config.max_width, int(h * ratio)), interpolation=cv2.INTER_LINEAR)
 
     def _capture_loop(self) -> None:
         cap = None
@@ -226,9 +230,14 @@ class CameraWorker:
             # retrieve() frame đã grab() thành công gần nhất - tránh lỗi "mất hẳn frame"
             # (đã tự phát hiện bug này: gọi grab() thừa vô điều kiện làm retrieve() sau
             # đó fail hoàn toàn với nguồn không có backlog để vứt).
-            for _ in range(max(0, self._config.capture_skip_grabs)):
-                if not cap.grab():
-                    break
+            # CHỈ áp dụng cho rtsp:// - đây là loại nguồn duy nhất chắc chắn đẩy frame
+            # liên tục (camera thật qua mạng); HTTP/MJPEG hay nguồn tĩnh không có backlog
+            # thật để vứt nên tự động giữ nguyên hành vi cũ (0 lần grab thừa), tránh phải
+            # nhớ set STREAM_CAPTURE_SKIP_GRABS=0 thủ công mỗi khi trộn nhiều loại camera.
+            if self.source_url.startswith("rtsp://"):
+                for _ in range(max(0, self._config.capture_skip_grabs)):
+                    if not cap.grab():
+                        break
 
             ok, frame = cap.retrieve()
             if not ok or frame is None:

@@ -36,13 +36,12 @@ class Settings(BaseSettings):
     stream_max_width: int = 1280
     # >0: sau grab() đầu tiên, grab() thêm N lần rồi mới retrieve() - chủ động vứt bớt
     # frame cũ còn tồn trong buffer nội bộ của FFmpeg/OS socket để luôn hiển thị frame
-    # MỚI NHẤT có thể, đánh đổi lấy fps hiển thị thấp hơn 1 chút. CHỈ AN TOÀN với nguồn
-    # liên tục đẩy frame nhanh hơn tốc độ mình đọc (RTSP camera thật) - đã tự verify: bật
-    # giá trị này cho nguồn HTTP/MJPEG tốc độ thấp (hoặc test bằng 1 ảnh tĩnh) làm
-    # retrieve() sau grab() thừa bị fail liên tục -> MẤT HẲN frame, không phải chỉ giật.
-    # Mặc định để 0 (an toàn cho mọi loại nguồn); chỉ tăng lên 1-2 nếu bạn CHẮC CHẮN
-    # camera là RTSP thật, đang chạy ổn định, và vẫn còn thấy trễ sau khi đã giảm max_delay.
-    stream_capture_skip_grabs: int = 0
+    # MỚI NHẤT có thể, đánh đổi lấy fps hiển thị thấp hơn 1 chút. CameraWorker._capture_loop
+    # chỉ áp dụng giá trị này khi source_url là rtsp:// thật (nguồn duy nhất chắc chắn đẩy
+    # frame liên tục) - HTTP/MJPEG hay nguồn tĩnh tự động bỏ qua nên bật > 0 ở đây an toàn
+    # dù hệ thống trộn nhiều loại camera. Tăng lên 2 nếu vẫn còn trễ sau khi đã giảm
+    # max_delay và xác nhận camera RTSP đang chạy ổn định (0 grab/retrieve fail trong log).
+    stream_capture_skip_grabs: int = 1
     stream_ws_target_fps: int = 25
     stream_rtsp_transport: str = "tcp"
     # max_delay 10ms (giảm từ 100ms) để FFmpeg không giữ lại gói tin chờ ghép nối trước

@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     # JWT (bảo vệ API bằng Bearer token)
     jwt_secret: str = "CHANGE_ME_dev_secret_please_override_in_env"
     jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 720  # 12 giờ
+    jwt_expire_minutes: int = 10080  # 7 ngày
     rfid_link_window_seconds: int = 30
     cors_origins: str = "*"
     plate_recognizer: str = ""

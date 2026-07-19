@@ -22,7 +22,9 @@ services:
   # browser xem trễ thấp; đồng thời phát lại RTSP nội bộ cho AI worker + fallback JPEG của
   # backend. Path (cam<id>) do backend tự thêm/xoá động qua Control API - xem services/mediamtx.py.
   mediamtx:
-    image: bluenviron/mediamtx:latest
+    # PIN version cố định (không dùng :latest) để tránh 1 bản mới đổi API/cấu hình gây vỡ
+    # (backend gọi Control API /v3/config/paths + authMethod http). v1.19.2 đã test OK.
+    image: bluenviron/mediamtx:1.19.2
     restart: unless-stopped
     environment:
       # Quảng bá host thật trong ICE candidate để browser (kể cả máy khác trong LAN) kết nối

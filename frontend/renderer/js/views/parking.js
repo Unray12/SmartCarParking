@@ -1,8 +1,9 @@
 // Trang Parking Lots: CRUD bãi, sức chứa/occupancy, ảnh chụp, chi tiết bãi (live + capture + log).
-import { api, wsCameraUrl } from '../api.js';
+import { api } from '../api.js';
 import { appState, loadNav, saveNav } from '../state.js';
 import { els } from '../dom.js';
 import { createStreamSession } from '../stream.js';
+import { createJpegCanvasPlayer } from '../jpeg-stream.js';
 import { notify, fmtDate, absoluteApiUrl, absoluteApiUrlNoCache, cameraNameById, occClass, occRate, escapeHtml, setStreamStatusChip, withButtonBusy } from '../ui.js';
 
 const lotDetailState = {
@@ -195,73 +196,6 @@ function lotEls(kind) {
 
 // Fallback JPEG-over-WebSocket cho 1 hướng, vẽ lên canvas tương ứng. Trả { stop }. Tự mở
 // lại nếu WS rớt trong lúc phiên vẫn đang chạy (stream.js không tự restart JPEG).
-function makeLotJpeg(kind, cameraId) {
-  const { canvas, placeholder } = lotEls(kind);
-  const ctx = canvas.getContext('2d');
-  canvas.width = 1280;
-  canvas.height = 720;
-
-  let pendingFrame = null;
-  let decoding = false;
-  let animFrameId = null;
-  let ws = null;
-  let stopped = false;
-
-  async function consumeFrame() {
-    animFrameId = null;
-    if (decoding) return;
-    decoding = true;
-
-    const frame = pendingFrame;
-    pendingFrame = null;
-
-    if (frame) {
-      const blob = new Blob([frame], { type: 'image/jpeg' });
-      const bmp = await createImageBitmap(blob);
-      placeholder.style.display = 'none';
-      ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
-      bmp.close();
-    }
-
-    decoding = false;
-    if (pendingFrame && !decoding) {
-      animFrameId = requestAnimationFrame(() => consumeFrame().catch(console.error));
-    }
-  }
-
-  function open() {
-    ws = new WebSocket(wsCameraUrl(cameraId));
-    ws.binaryType = 'arraybuffer';
-    ws.onmessage = (ev) => {
-      pendingFrame = ev.data;
-      if (!decoding && !animFrameId) {
-        animFrameId = requestAnimationFrame(() => consumeFrame().catch(console.error));
-      }
-    };
-    ws.onclose = () => {
-      if (stopped) return;
-      setLotPlaceholder(kind, 'Mất kết nối camera');
-      setTimeout(() => { if (!stopped) open(); }, 1000);
-    };
-  }
-
-  open();
-
-  return {
-    stop() {
-      stopped = true;
-      if (animFrameId) { cancelAnimationFrame(animFrameId); animFrameId = null; }
-      if (ws) {
-        ws.onmessage = null;
-        ws.onclose = null;
-        ws.onerror = null;
-        ws.close();
-        ws = null;
-      }
-    }
-  };
-}
-
 function openLotKind(kind, cameraId) {
   const { video, canvas, placeholder, status } = lotEls(kind);
   canvas.width = 1280;
@@ -286,7 +220,11 @@ function openLotKind(kind, cameraId) {
       video.classList.remove('is-live');
       canvas.style.display = '';
     },
-    startJpeg: () => makeLotJpeg(kind, cameraId),
+    startJpeg: () => createJpegCanvasPlayer({
+      cameraId,
+      canvas,
+      onFirstFrame: () => { placeholder.style.display = 'none'; }
+    }),
     onMode: (mode) => setStreamStatusChip(status, mode)
   });
   session.start();

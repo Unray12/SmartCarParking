@@ -1,16 +1,22 @@
-# Context — SmartCarParking (chi tiết theo chủ đề)
+# Context — SmartCarParking (tài liệu chi tiết theo chủ đề)
 
-Thư mục này chia nhỏ tài liệu context theo từng chủ đề để dễ đọc/review. File tổng quan
-toàn hệ thống vẫn ở `../CONTEXT.md` (nghiệp vụ RFID, DB, auth, API...). Thư mục này tập
-trung vào **hệ thống stream camera** và **cấu trúc/chất lượng code frontend** — phần được
-làm mới & refactor nhiều nhất gần đây.
+Toàn bộ logic & kiến trúc hệ thống nằm trong thư mục này, chia nhỏ theo chủ đề để dễ đọc/review.
+File [`../CONTEXT.md`](../CONTEXT.md) ngoài chỉ là hướng dẫn cơ bản + trỏ vào đây.
 
+## Bắt đầu ở đâu
+- Chưa quen hệ thống → đọc [overview.md](overview.md) (logic cốt lõi, phải đọc trước).
+- Cần sửa/thêm code, không biết mở file nào → [code-map.md](code-map.md).
+
+## Danh mục
 | File | Nội dung |
 |---|---|
-| [01-streaming-architecture.md](01-streaming-architecture.md) | Kiến trúc stream WebRTC + JPEG hybrid, MediaMTX, sơ đồ, luồng dữ liệu |
-| [02-frontend-modules.md](02-frontend-modules.md) | Cấu trúc module FE, `stream.js`/`jpeg-stream.js`, giữ phiên, UX |
-| [03-backend-streaming.md](03-backend-streaming.md) | `camera_stream.py`, `mediamtx.py`, module `streaming`, on-demand |
-| [04-refactor-log.md](04-refactor-log.md) | Nhật ký refactor: đã đổi gì, vì sao, bug tìm được, đánh giá clean-code |
-| [05-testing-notes.md](05-testing-notes.md) | Cách test trên Docker, lệnh kiểm thử, các bẫy (Windows path, camera down) |
+| [overview.md](overview.md) | Logic cốt lõi (ĐỌC TRƯỚC), tổng quan, luồng nghiệp vụ end-to-end, gotchas |
+| [code-map.md](code-map.md) | **Bản đồ file**: tra theo triệu chứng, vai trò từng file, luồng xuyên file |
+| [backend.md](backend.md) | Data model, init_db/migration, lifecycle, config, recognizer, API modules |
+| [rfid.md](rfid.md) | Đọc RFID (USB/nhiều đầu đọc) + logic check-in/out (nghiệp vụ trung tâm) |
+| [frontend.md](frontend.md) | SPA vanilla JS: IA, module, điều phối, camera/parking/ai |
+| [streaming-architecture.md](streaming-architecture.md) | Stream WebRTC + JPEG hybrid, MediaMTX, chống trễ tích luỹ, on-demand |
+| [testing-notes.md](testing-notes.md) | Cách test trên Docker, lệnh kiểm thử, các bẫy (Windows path, camera down) |
+| [changelog.md](changelog.md) | Nhật ký thay đổi (mới nhất ở trên) + đánh giá clean-code |
 
 > Cập nhật gần nhất: 2026-07-19.

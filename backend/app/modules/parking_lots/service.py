@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from fastapi import HTTPException
-from sqlalchemy import func, select
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -57,10 +57,6 @@ def get_parking_lot(db: Session, lot_id: int) -> ParkingLot | None:
     return db.get(ParkingLot, lot_id)
 
 
-def get_default_active_lot(db: Session) -> ParkingLot | None:
-    return db.scalar(select(ParkingLot).where(ParkingLot.is_active.is_(True)).order_by(ParkingLot.id.asc()).limit(1))
-
-
 def create_parking_lot(
     db: Session,
     payload: ParkingLotCreate,
@@ -75,7 +71,6 @@ def create_parking_lot(
         capacity=payload.capacity,
         entry_camera_id=payload.entry_camera_id,
         exit_camera_id=payload.exit_camera_id,
-        is_active=payload.is_active,
         ai_enabled=payload.ai_enabled,
         rfid_usb_port=(payload.rfid_usb_port or "").strip() or None,
     )
@@ -110,8 +105,6 @@ def update_parking_lot(
         lot.capacity = payload.capacity
     lot.entry_camera_id = payload.entry_camera_id
     lot.exit_camera_id = payload.exit_camera_id
-    if payload.is_active is not None:
-        lot.is_active = payload.is_active
     if payload.ai_enabled is not None:
         lot.ai_enabled = payload.ai_enabled
     lot.rfid_usb_port = (payload.rfid_usb_port or "").strip() or None
@@ -128,16 +121,46 @@ def delete_parking_lot(
     db: Session,
     lot_id: int,
     rfid_reader_manager: "RfidReaderManager | None" = None,
+    force: bool = False,
 ) -> bool:
     lot = get_parking_lot(db, lot_id)
     if not lot:
         return False
+
+    # Phiên gửi xe là lịch sử/doanh thu đã CHỐT (immutable). force=False (mặc định): còn
+    # phiên nào (đang gửi hay đã ra) -> 409 kèm số liệu cụ thể, để FE hỏi lại bằng popup
+    # "còn xe/lịch sử, bạn có chắc chắn muốn xóa?" - người dùng có thể Cancel hoặc xác nhận
+    # xóa (force=True). Quyết định người dùng (2026-07-21): xóa bãi KHÔNG xóa log - chỉ
+    # ngắt liên kết lot_id (NULL) trên ParkingSession/RfidEvent, giữ nguyên toàn bộ dữ liệu.
+    total_sessions = db.scalar(
+        select(func.count(ParkingSession.id)).where(ParkingSession.lot_id == lot_id)
+    ) or 0
+    if total_sessions and not force:
+        active_sessions = db.scalar(
+            select(func.count(ParkingSession.id)).where(
+                ParkingSession.lot_id == lot_id, ParkingSession.exit_time.is_(None)
+            )
+        ) or 0
+        if active_sessions:
+            detail = (
+                f"Bãi xe còn {active_sessions} xe đang gửi và tổng {total_sessions} phiên "
+                "lịch sử."
+            )
+        else:
+            detail = f"Bãi xe còn {total_sessions} phiên lịch sử gửi xe."
+        raise HTTPException(status_code=409, detail=f"{detail} Bạn có chắc chắn muốn xóa?")
+
+    # Không xóa cứng ParkingSession/RfidEvent - chỉ ngắt liên kết lot_id về NULL để GIỮ LẠI
+    # log (vẫn xem được ở History/Logs, chỉ mất thông tin "thuộc bãi nào").
+    db.execute(update(ParkingSession).where(ParkingSession.lot_id == lot_id).values(lot_id=None))
+    db.execute(update(RfidEvent).where(RfidEvent.lot_id == lot_id).values(lot_id=None))
+
     db.delete(lot)
     try:
         db.commit()
     except IntegrityError:
         db.rollback()
-        raise HTTPException(status_code=409, detail="Bãi xe còn lịch sử phiên gửi xe, không thể xóa")
+        raise HTTPException(status_code=409, detail="Bãi xe còn dữ liệu liên quan, không thể xóa.")
     if rfid_reader_manager is not None:
         rfid_reader_manager.remove_lot(lot_id)
     return True

@@ -5,6 +5,7 @@ import { els } from '../dom.js';
 import { createStreamSession } from '../stream.js';
 import { createJpegCanvasPlayer } from '../jpeg-stream.js';
 import { notify, fmtDate, absoluteApiUrl, absoluteApiUrlNoCache, cameraNameById, occClass, occRate, escapeHtml, setStreamStatusChip, withButtonBusy } from '../ui.js';
+import { confirmDialog } from '../confirm-dialog.js';
 
 const lotDetailState = {
   selectedLotId: null,
@@ -44,7 +45,6 @@ export function resetLotForm() {
   els.lotFormTitle.textContent = 'Tạo bãi xe';
   els.lotSubmitBtn.textContent = 'Lưu bãi xe';
   els.lotForm.reset();
-  els.lotIsActive.checked = true;
   els.lotAiEnabled.checked = false;
   if (els.lotCapacity) els.lotCapacity.value = '50';
   if (els.lotRfidPort) els.lotRfidPort.value = '';
@@ -58,7 +58,6 @@ function fillLotFormForEdit(lot) {
   if (els.lotCapacity) els.lotCapacity.value = String(lot.capacity ?? 50);
   els.lotEntryCamera.value = lot.entry_camera_id ? String(lot.entry_camera_id) : '';
   els.lotExitCamera.value = lot.exit_camera_id ? String(lot.exit_camera_id) : '';
-  els.lotIsActive.checked = Boolean(lot.is_active);
   els.lotAiEnabled.checked = Boolean(lot.ai_enabled);
   if (els.lotRfidPort) els.lotRfidPort.value = lot.rfid_usb_port || '';
 }
@@ -94,7 +93,7 @@ function renderLotFilterOptions(lots) {
 
   const defaultLotOpt = document.createElement('option');
   defaultLotOpt.value = '';
-  defaultLotOpt.textContent = 'Bãi mặc định (active)';
+  defaultLotOpt.textContent = 'Bãi mặc định (bãi đầu tiên)';
   els.rfidLot.appendChild(defaultLotOpt);
 
   for (const lot of lots) {
@@ -110,10 +109,60 @@ function renderLotFilterOptions(lots) {
   }
 }
 
+// Xóa bãi xe. Nếu bãi còn phiên gửi xe (đang gửi hoặc lịch sử), backend trả 409 kèm số
+// liệu cụ thể ("còn N xe đang gửi và tổng M phiên...") - hỏi lại người dùng bằng popup
+// riêng chứa đúng thông tin đó, xác nhận thì xóa với force=true (giữ lại toàn bộ log,
+// chỉ ngắt liên kết với bãi - xem parking_lots/service.py:delete_parking_lot).
+async function deleteLotWithConfirm(lotId) {
+  // Dữ liệu occupancy đã có sẵn từ danh sách bãi đang hiển thị (không cần gọi API thêm) -
+  // cảnh báo ngay ở bước xác nhận ĐẦU TIÊN nếu bãi đang có xe gửi thực tế, thay vì chỉ biết
+  // sau khi bị 409 (xem nhánh dưới - vẫn còn cho trường hợp chỉ còn lịch sử đã đóng).
+  const lot = appState.parkingLots.find((l) => l.id === Number(lotId));
+  const occupied = Number(lot?.occupied || 0);
+  const agreed = await confirmDialog({
+    title: occupied ? 'Bãi xe đang có xe gửi' : 'Xóa bãi xe',
+    message: occupied
+      ? `Bãi xe #${lotId} đang có ${occupied} xe gửi thực tế bên trong. Xóa bãi này KHÔNG làm mất dữ liệu xe, nhưng bãi sẽ biến mất khỏi hệ thống. Bạn có chắc chắn muốn xóa?`
+      : `Xóa bãi xe #${lotId}?`,
+    confirmText: 'Xóa',
+    tone: 'danger',
+  });
+  if (!agreed) return;
+
+  try {
+    await api(`/api/v1/parking-lots/${lotId}`, { method: 'DELETE' });
+    notify('Đã xóa bãi xe', 'success');
+    await loadParkingLots();
+    await refreshSnapshotList();
+    return;
+  } catch (err) {
+    if (err.status !== 409) {
+      notify(`Xóa bãi xe lỗi: ${err.message}`, 'error');
+      return;
+    }
+    const stillAgreed = await confirmDialog({
+      title: 'Bãi xe còn dữ liệu',
+      message: `${err.message}\n\nLịch sử phiên/log sẽ được GIỮ LẠI (chỉ mất liên kết với bãi này).`,
+      confirmText: 'Vẫn xóa',
+      tone: 'danger',
+    });
+    if (!stillAgreed) return;
+  }
+
+  try {
+    await api(`/api/v1/parking-lots/${lotId}?force=true`, { method: 'DELETE' });
+    notify('Đã xóa bãi xe (đã giữ lại lịch sử)', 'success');
+    await loadParkingLots();
+    await refreshSnapshotList();
+  } catch (err2) {
+    notify(`Xóa bãi xe lỗi: ${err2.message}`, 'error');
+  }
+}
+
 function renderParkingLots(lots) {
   els.lotBody.innerHTML = '';
   if (!lots.length) {
-    els.lotBody.innerHTML = '<tr><td colspan="12" class="empty">Chưa có bãi xe</td></tr>';
+    els.lotBody.innerHTML = '<tr><td colspan="11" class="empty">Chưa có bãi xe</td></tr>';
     return;
   }
 
@@ -132,7 +181,6 @@ function renderParkingLots(lots) {
       </td>
       <td>${escapeHtml(cameraNameById(lot.entry_camera_id))}</td>
       <td>${escapeHtml(cameraNameById(lot.exit_camera_id))}</td>
-      <td>${lot.is_active ? '<span class="chip chip-in">Active</span>' : '<span class="chip chip-out">Inactive</span>'}</td>
       <td>${lot.ai_enabled ? '<span class="chip chip-in">Bật</span>' : '<span class="chip chip-out">Tắt</span>'}</td>
       <td>${lot.rfid_usb_port ? escapeHtml(lot.rfid_usb_port) : '<span class="muted">mặc định</span>'}</td>
       <td><button class="ghost lot-manage-btn" data-lot-id="${lot.id}">Quản lý</button></td>
@@ -154,18 +202,7 @@ function renderParkingLots(lots) {
     });
   }
   for (const btn of els.lotBody.querySelectorAll('.lot-delete-btn')) {
-    btn.addEventListener('click', async () => {
-      const lotId = btn.dataset.lotId;
-      if (!confirm(`Xóa bãi xe #${lotId}?`)) return;
-      try {
-        await api(`/api/v1/parking-lots/${lotId}`, { method: 'DELETE' });
-        notify('Đã xóa bãi xe', 'success');
-        await loadParkingLots();
-        await refreshSnapshotList();
-      } catch (err) {
-        notify(`Xóa bãi xe lỗi: ${err.message}`, 'error');
-      }
-    });
+    btn.addEventListener('click', () => deleteLotWithConfirm(btn.dataset.lotId));
   }
 }
 
@@ -558,7 +595,6 @@ export function initParking(opts = {}) {
           capacity: els.lotCapacity && els.lotCapacity.value !== '' ? Number(els.lotCapacity.value) : 50,
           entry_camera_id: els.lotEntryCamera.value ? Number(els.lotEntryCamera.value) : null,
           exit_camera_id: els.lotExitCamera.value ? Number(els.lotExitCamera.value) : null,
-          is_active: Boolean(els.lotIsActive.checked),
           ai_enabled: Boolean(els.lotAiEnabled.checked),
           rfid_usb_port: els.lotRfidPort && els.lotRfidPort.value.trim() ? els.lotRfidPort.value.trim() : null,
         }),
@@ -603,7 +639,6 @@ export function initParking(opts = {}) {
           capacity: lot.capacity,
           entry_camera_id: lot.entry_camera_id,
           exit_camera_id: lot.exit_camera_id,
-          is_active: lot.is_active,
           ai_enabled: nextEnabled,
           rfid_usb_port: lot.rfid_usb_port ?? null,
         }),

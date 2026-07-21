@@ -107,7 +107,7 @@ def _detect_plate_via_ai(
 def _resolve_lot(db: Session, lot_id: int | None) -> ParkingLot | None:
     if lot_id is not None:
         return db.get(ParkingLot, lot_id)
-    return db.scalar(select(ParkingLot).where(ParkingLot.is_active.is_(True)).order_by(ParkingLot.id.asc()).limit(1))
+    return db.scalar(select(ParkingLot).order_by(ParkingLot.id.asc()).limit(1))
 
 
 def _snapshot_root() -> Path:

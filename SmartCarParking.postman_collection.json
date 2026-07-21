@@ -303,7 +303,7 @@
             "url": "{{baseUrl}}/api/v1/parking-lots",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Bai A\",\n  \"capacity\": 50,\n  \"entry_camera_id\": null,\n  \"exit_camera_id\": null,\n  \"is_active\": true\n}",
+              "raw": "{\n  \"name\": \"Bai A\",\n  \"capacity\": 50,\n  \"entry_camera_id\": null,\n  \"exit_camera_id\": null\n}",
               "options": {
                 "raw": {
                   "language": "json"
@@ -325,7 +325,7 @@
             "url": "{{baseUrl}}/api/v1/parking-lots/1",
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"name\": \"Bai A\",\n  \"capacity\": 80,\n  \"entry_camera_id\": null,\n  \"exit_camera_id\": null,\n  \"is_active\": true\n}",
+              "raw": "{\n  \"name\": \"Bai A\",\n  \"capacity\": 80,\n  \"entry_camera_id\": null,\n  \"exit_camera_id\": null\n}",
               "options": {
                 "raw": {
                   "language": "json"

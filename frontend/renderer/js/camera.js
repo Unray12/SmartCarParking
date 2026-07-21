@@ -2,6 +2,7 @@ import { createStreamSession } from './stream.js';
 import { createJpegCanvasPlayer } from './jpeg-stream.js';
 import { setStreamStatusChip, withButtonBusy } from './ui.js';
 import { loadNav, saveNav } from './state.js';
+import { confirmDialog } from './confirm-dialog.js';
 
 export function createCameraModule({ els, state, api, notify, onCameraMutated, onCamerasUpdated }) {
   const cameraViews = new Map();
@@ -296,7 +297,12 @@ export function createCameraModule({ els, state, api, notify, onCameraMutated, o
     }
 
     async function deleteCamera() {
-      const agreed = window.confirm(`Xóa camera "${camera.name}" (#${camera.id})?`);
+      const agreed = await confirmDialog({
+        title: 'Xóa camera',
+        message: `Xóa camera "${camera.name}" (#${camera.id})?`,
+        confirmText: 'Xóa',
+        tone: 'danger',
+      });
       if (!agreed) return;
 
       try {

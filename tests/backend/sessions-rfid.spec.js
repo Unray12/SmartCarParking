@@ -20,10 +20,11 @@ test.describe('RFID check-in/check-out -> ParkingSession', () => {
   });
 
   test.afterAll(async ({ request }) => {
-    // Bãi này đã có lịch sử phiên gửi xe (parking_sessions.lot_id tham chiếu tới) ->
-    // backend từ chối xóa cứng (409, xem test "xóa bãi xe có lịch sử..." bên dưới).
-    // Dọn dẹp hợp lý là vô hiệu hóa (is_active=false) thay vì xóa.
-    if (lotId) await request.put(`/api/v1/parking-lots/${lotId}`, { headers, data: { is_active: false } });
+    // Bãi này đã có lịch sử phiên gửi xe (parking_sessions.lot_id tham chiếu tới) -> DELETE
+    // thường trả 409 (test "xóa bãi xe có lịch sử..." bên dưới) - dùng force=true để dọn
+    // thật (không để lot rác tồn mãi qua các lần chạy test), lịch sử phiên vẫn được giữ
+    // (chỉ mất liên kết lot_id, xem parking_lots/service.py:delete_parking_lot).
+    if (lotId) await request.delete(`/api/v1/parking-lots/${lotId}?force=true`, { headers });
   });
 
   test('check-in với biển số -> tạo session status=in', async ({ request }) => {

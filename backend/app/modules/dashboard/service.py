@@ -32,9 +32,7 @@ def dashboard_summary(db: Session) -> DashboardSummaryOut:
         or 0
     )
 
-    total_capacity = db.scalar(
-        select(func.coalesce(func.sum(ParkingLot.capacity), 0)).where(ParkingLot.is_active.is_(True))
-    ) or 0
+    total_capacity = db.scalar(select(func.coalesce(func.sum(ParkingLot.capacity), 0))) or 0
     total_occupied = int(active_sessions)
     occupancy_rate = round((total_occupied / total_capacity) * 100, 1) if total_capacity else 0.0
 

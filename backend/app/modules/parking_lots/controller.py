@@ -65,10 +65,14 @@ def update_parking_lot_endpoint(
 @router.delete("/parking-lots/{lot_id}")
 def delete_parking_lot_endpoint(
     lot_id: int,
+    force: bool = False,
     db: Session = Depends(get_db),
     rfid_reader_manager: RfidReaderManager = Depends(get_rfid_reader_manager),
 ) -> dict[str, bool]:
-    ok = delete_parking_lot(db, lot_id, rfid_reader_manager)
+    # force=False (mặc định): còn phiên gửi xe thật -> 409 kèm số liệu, để FE hỏi lại người
+    # dùng bằng popup xác nhận. force=True: người dùng đã xác nhận ở popup đó -> xóa bãi,
+    # GIỮ LẠI log (session/rfid event chỉ bị ngắt lot_id về NULL, không xóa dữ liệu).
+    ok = delete_parking_lot(db, lot_id, rfid_reader_manager, force=force)
     if not ok:
         raise HTTPException(status_code=404, detail="Parking lot not found")
     return {"ok": True}

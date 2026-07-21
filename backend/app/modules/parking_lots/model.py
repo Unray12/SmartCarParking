@@ -16,7 +16,6 @@ class ParkingLot(Base):
     capacity: Mapped[int] = mapped_column(Integer, default=50, nullable=False)
     entry_camera_id: Mapped[int | None] = mapped_column(ForeignKey("cameras.id"), nullable=True)
     exit_camera_id: Mapped[int | None] = mapped_column(ForeignKey("cameras.id"), nullable=True)
-    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     # Bật AI nhận diện biển số cho bãi này: tự điền biển số lúc check-in (nếu chưa có)
     # + so khớp lại lúc check-out (ai_plate_match trên ParkingSession). Mặc định tắt.
     ai_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)

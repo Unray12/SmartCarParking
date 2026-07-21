@@ -3,6 +3,7 @@ import { api } from '../api.js';
 import { appState } from '../state.js';
 import { els } from '../dom.js';
 import { notify, showScanTick, fmtDate, fmtMoney, fmtDuration, escapeHtml } from '../ui.js';
+import { confirmDialog } from '../confirm-dialog.js';
 
 const seenCaptureEventKeys = new Set();
 const seenRejectedEventKeys = new Set();
@@ -130,7 +131,8 @@ function renderRfidCards() {
   for (const btn of els.rfidCardBody.querySelectorAll('.delete-card-btn')) {
     btn.addEventListener('click', async () => {
       const cardId = btn.dataset.cardId;
-      if (!confirm(`Xóa thẻ ${cardId}?`)) return;
+      const agreed = await confirmDialog({ title: 'Xóa thẻ RFID', message: `Xóa thẻ ${cardId}?`, confirmText: 'Xóa', tone: 'danger' });
+      if (!agreed) return;
       try {
         await api(`/api/v1/rfid/cards/${cardId}`, { method: 'DELETE' });
         notify('Xóa thẻ thành công', 'success');

@@ -114,7 +114,9 @@ export async function api(path, options = {}) {
           // ignore
         }
       }
-      throw new Error(detail);
+      const httpError = new Error(detail);
+      httpError.status = response.status;
+      throw httpError;
     }
 
     if (response.status === 204) return null;

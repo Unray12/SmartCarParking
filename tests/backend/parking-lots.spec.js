@@ -24,7 +24,6 @@ test.describe('Parking lots API (/api/v1/parking-lots)', () => {
     const body = await res.json();
     expect(body.name).toBe(name);
     expect(body.capacity).toBe(25);
-    expect(body.is_active).toBe(true);
     lotId = body.id;
   });
 

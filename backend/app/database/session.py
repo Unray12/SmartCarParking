@@ -82,6 +82,15 @@ def _ensure_runtime_schema() -> None:
         if "rfid_usb_port" not in lot_cols:
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE parking_lots ADD COLUMN rfid_usb_port VARCHAR(64)"))
+        # is_active đã bỏ khỏi model (tính năng kích hoạt/hủy kích hoạt bãi không còn ý
+        # nghĩa thực tế - quyết định người dùng 2026-07-21) nhưng cột vật lý CŨ trong DB vẫn
+        # NOT NULL mà KHÔNG có default ở mức DB (default=True cũ chỉ là Python-side, không
+        # sinh ra DEFAULT trong DDL) - nếu để vậy, INSERT không qua ORM sẽ lỗi NOT NULL vì
+        # ORM giờ không còn gửi cột này nữa. Thêm DEFAULT true ở DB để cột mồ côi này không
+        # bao giờ chặn insert - giữ nguyên triết lý "chỉ ADD, không xoá cột" của migration.
+        if "is_active" in lot_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE parking_lots ALTER COLUMN is_active SET DEFAULT true"))
 
     # Index occupancy (idempotent). Postgres/SQLite đều hỗ trợ IF NOT EXISTS.
     if "parking_sessions" in tables:

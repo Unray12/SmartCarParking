@@ -2,6 +2,88 @@
 
 > Mới nhất ở trên. Đánh giá clean-code & nguyên tắc mở rộng gần đây nằm ở cuối mỗi entry.
 
+### 2026-07-21 — Bỏ tính năng kích hoạt/hủy kích hoạt bãi xe (`ParkingLot.is_active`)
+**Yêu cầu người dùng:** không thấy ý nghĩa thực tế, bỏ hẳn luồng "Kích hoạt bãi xe" (checkbox
+form, chip Active/Inactive, cột "Trạng thái" ở bảng bãi). Tính năng này vừa được đề xuất làm
+giải pháp thay cho xóa cứng (entry ngay trên) - nay không còn cần vì đã có force-delete giữ log.
+
+**Đổi gì (bỏ khỏi TOÀN BỘ code, không chỉ UI):**
+- `ParkingLot.is_active` xoá khỏi model + `ParkingLotCreate/Update/Out` schema.
+- `rfid/service.py:_resolve_lot(lot_id=None)` (bãi mặc định cho cổng RFID chung) và
+  `dashboard/service.py:dashboard_summary` (tổng `capacity`) bỏ filter `is_active` - fallback
+  giờ là "bãi đầu tiên theo id" / "tổng tất cả bãi" (không còn khái niệm active/inactive).
+- `rfid_usb_reader.py:RfidReaderManager` bỏ gate `lot.is_active` khi quyết định có khởi động
+  đầu đọc riêng cho bãi hay không - còn lại điều kiện duy nhất là có gán `rfid_usb_port`.
+- Hàm `get_default_active_lot` (parking_lots/service.py) xoá luôn - không còn nơi gọi.
+- **Cột DB `is_active` KHÔNG xoá** (migration ở đây chỉ ADD, không rollback/xoá cột) - cột cũ
+  NOT NULL nhưng vốn không có DEFAULT ở mức DB (default=True cũ chỉ là Python-side) nên thêm
+  `ALTER COLUMN is_active SET DEFAULT true` (database/session.py) để cột mồ côi này không bao
+  giờ chặn insert khi ORM không còn gửi giá trị cho nó nữa.
+- FE: bỏ checkbox "Kích hoạt bãi xe" trong form, bỏ cột "Trạng thái"/chip Active-Inactive ở
+  bảng bãi (colspan 12→11), đổi nhãn dropdown "Bãi mặc định (active)" → "(bãi đầu tiên)".
+- Test suite: bỏ assertion `is_active` trong `parking-lots.spec.js`; `sessions-rfid.spec.js`
+  đổi cleanup từ "vô hiệu hóa bãi" (PUT is_active=false, để lại rác vĩnh viễn qua các lần chạy
+  test) sang xóa thật bằng `DELETE ?force=true` (nay giữ được lịch sử mà không cần is_active).
+
+**Verify:** `import app.main` OK; test "xóa bãi xe có lịch sử -> 409" vẫn đúng hành vi cũ
+(không phụ thuộc is_active).
+
+### 2026-07-21 — Xóa bãi xe: đổi chặn cứng thành popup xác nhận, xóa bãi giữ nguyên log
+**Yêu cầu người dùng (tinh chỉnh lại quyết định trước đó cùng ngày):** thay vì chặn cứng
+409 không cho xóa khi bãi còn phiên gửi xe, đổi thành popup cảnh báo "còn xe/lịch sử, bạn
+có chắc chắn muốn xóa?" - người dùng chọn Xóa hoặc Cancel. Nếu chọn Xóa: xóa bãi thật,
+nhưng **log vẫn giữ lại** (không xóa `ParkingSession`/`RfidEvent`).
+
+**Đổi gì:**
+- `DELETE /api/v1/parking-lots/{id}` thêm query `force` (mặc định `false`). `force=false`
+  + còn phiên → vẫn 409 (giữ message kèm số liệu cụ thể) nhưng bớt câu "không thể xóa"
+  cứng, đổi thành hỏi "Bạn có chắc chắn muốn xóa?" - đây là tín hiệu cho FE hỏi lại, không
+  còn là chặn tuyệt đối.
+- `delete_parking_lot`: bỏ hẳn nhánh `DELETE FROM rfid_events` cũ (dọn cứng) - thay bằng
+  `UPDATE parking_sessions/rfid_events SET lot_id = NULL WHERE lot_id = :id` cho MỌI
+  trường hợp (force hay không, có phiên thật hay chỉ có rejected event) - nguyên tắc
+  thống nhất: **xóa bãi không bao giờ xóa log**, chỉ ngắt liên kết.
+- FE `parking.js:deleteLotWithConfirm` - gọi DELETE thường; bắt lỗi `409` (giờ `api.js`
+  gắn `err.status` từ response, không chỉ `err.message`) → hiện `confirm()` thứ 2 với
+  đúng message backend trả (đã có số liệu) + ghi rõ "log sẽ được giữ lại"; xác nhận thì
+  gọi lại `?force=true`.
+
+**Verify (API thật):** bãi có 1 phiên lịch sử → DELETE thường trả 409 đúng message mới;
+DELETE `?force=true` → 200, bãi biến mất, session vẫn còn nguyên (status/fee/thời gian
+không đổi) chỉ `lot_id` thành NULL.
+
+### 2026-07-21 — Xóa bãi xe/camera: chính sách rõ ràng + fix crash 500 khi xóa camera
+**Vấn đề:** `delete_parking_lot` chặn xóa bằng cách bắt `IntegrityError` chung (từ FK
+`parking_sessions.lot_id` HOẶC `rfid_events.lot_id`) — thông báo "còn lịch sử phiên gửi xe"
+dù thực ra có thể chỉ còn `RfidEvent` bị từ chối (already_in/not_found, chưa từng có xe
+vào/ra thật), khiến user không xóa được bãi test/tạo nhầm dù chưa có nghiệp vụ thật nào.
+Nặng hơn: `delete_camera` (`cameras/service.py`) **hoàn toàn không bắt `IntegrityError`** —
+xóa camera đang gắn ở `parking_lots.entry/exit_camera_id`, `parking_sessions.entry/
+exit_camera_id`, hoặc có `plate_reads` (camera_id NOT NULL) → crash 500 (bug đã biết từ
+2026-07-14, xem overview.md cũ).
+
+**Quyết định chính sách (người dùng chọn, không tự suy đoán vì ảnh hưởng mất dữ liệu):**
+phiên gửi xe (`ParkingSession`) là lịch sử/doanh thu đã CHỐT, immutable — CHẶN CỨNG xóa bãi/
+camera nếu còn tham chiếu tới ít nhất 1 phiên (dù đang gửi hay đã ra), hướng dẫn dùng
+"Tắt hoạt động" (`ParkingLot.is_active`, đã có sẵn) / nút Tắt camera (`Camera.enabled`, đã
+có sẵn) để ẩn mà KHÔNG mất lịch sử. Message 409 phân biệt rõ có bao nhiêu xe **đang gửi**
+(nguy hiểm hơn) so với chỉ còn lịch sử đã đóng. Nếu KHÔNG còn phiên thật:
+- Bãi chỉ còn `RfidEvent` bị từ chối (log quẹt thẻ đơn thuần, không phải lịch sử phí) → cho
+  xóa, tự dọn (`DELETE FROM rfid_events WHERE lot_id=...`) trước khi xóa bãi.
+- Camera chỉ còn gắn ở **cấu hình** bãi (`entry/exit_camera_id` — con trỏ cấu hình HIỆN TẠI,
+  không phải lịch sử) → cho xóa, tự `UPDATE ... SET entry_camera_id=NULL` (bãi mất camera đã
+  gán, chọn lại sau — FE `cameraNameById()` đã tự hiện "-" cho camera null/không tồn tại,
+  không cần sửa FE). Camera chỉ còn `plate_reads` rời (chưa từng gắn vào phiên nào) → tự
+  xóa các plate_reads đó trước khi xóa camera.
+
+**Verify (Docker thật, không chỉ đọc code):** dựng camera+bãi+phiên test qua API thật —
+xóa bãi/camera lúc phiên ĐANG GỬI → 409 đúng message có số xe đang gửi; check-out xong xóa
+lại → vẫn 409 (đúng, giờ là lịch sử đã đóng) nhưng message đổi (không còn "đang gửi"); bãi
+chỉ có RfidEvent bị từ chối → xóa 200, event bị dọn theo; camera chỉ gắn ở cấu hình bãi (chưa
+từng có phiên) → xóa 200, cột camera của bãi tự về NULL (không dangling, không crash); camera
+chỉ có plate_reads rời → xóa 200, plate_reads bị dọn theo. Dọn sạch toàn bộ dữ liệu test sau
+khi verify.
+
 ### 2026-07-21 — Bảo mật: token JWT toàn quyền lộ qua URL ảnh snapshot
 **Vấn đề (rà soát bảo mật lần 2):** `<img src>` không gắn được header nên URL ảnh snapshot
 phải mang token qua query `?token=`. Trước đây FE tự đính THẲNG JWT đăng nhập (toàn quyền

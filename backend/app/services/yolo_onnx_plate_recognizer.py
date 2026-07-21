@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 
 import cv2
@@ -196,6 +197,10 @@ class YoloOnnxPlateRecognizer:
         self._det_conf = settings.plate_detector_conf
         self._ocr_conf = settings.plate_ocr_conf
         self._iou = 0.45
+        # Xem comment ở core/config.py:Settings.plate_detector_max_boxes.
+        self._max_boxes = max(1, settings.plate_detector_max_boxes)
+        self._min_box_w = max(0, settings.plate_min_box_width)
+        self._min_box_h = max(0, settings.plate_min_box_height)
 
     @staticmethod
     def _read_names(session: "ort.InferenceSession") -> dict[int, str]:
@@ -216,43 +221,58 @@ class YoloOnnxPlateRecognizer:
             results.append((scaled, conf, cls))
         return results
 
+    # Biển VN luôn 7-9 ký tự - đọc được >= ngưỡng này thì coi là ĐỦ TỐT, không cần thử thêm
+    # candidate thứ 2 (đỡ 1 lượt inference OCR đầy đủ, ~bằng chi phí của cả lượt đầu).
+    _GOOD_ENOUGH_CHAR_COUNT = 6
+
+    def _ocr_candidate(self, candidate: np.ndarray) -> tuple[str, float, int]:
+        """Chạy OCR trên 1 candidate, trả (text, avg_conf, char_count). char_count=0 nếu
+        không đọc được ký tự nào (không tìm thấy plate_crop hoặc rỗng)."""
+        if candidate.size == 0:
+            return "", 0.0, 0
+        char_detections = self._run(self._ocr_session, candidate, self._ocr_conf)
+        if not char_detections:
+            return "", 0.0, 0
+
+        chars: list[tuple[float, float, float, str]] = []
+        confs: list[float] = []
+        for box, conf, cls in char_detections:
+            char = self._ocr_names.get(cls, "")
+            if not char:
+                continue
+            x_center = (box[0] + box[2]) / 2
+            y_center = (box[1] + box[3]) / 2
+            height = box[3] - box[1]
+            chars.append((x_center, y_center, height, char))
+            confs.append(conf)
+
+        if not chars:
+            return "", 0.0, 0
+        return _assemble_plate_text(chars), sum(confs) / len(confs), len(chars)
+
     def _read_plate_text(self, plate_crop: np.ndarray) -> tuple[str, float]:
-        candidates = [plate_crop]
+        # Thử candidate "khả năng cao hơn" TRƯỚC (deskewed nếu biển lệch rõ, raw nếu không) -
+        # chỉ chạy thêm candidate còn lại khi kết quả đầu CHƯA đủ tốt (ít ký tự). Trước đây
+        # chạy CẢ 2 candidate vô điều kiện mỗi khi có góc lệch - tốn gấp đôi 1 lượt inference
+        # OCR (~200ms/lượt, đã tự đo) dù phần lớn trường hợp candidate đầu đã đủ tốt.
         deskewed = _deskew(plate_crop)
-        if deskewed is not None:
-            candidates.append(deskewed)
+        candidates = [deskewed, plate_crop] if deskewed is not None else [plate_crop]
 
         best_text, best_conf, best_count = "", 0.0, 0
         for candidate in candidates:
-            if candidate.size == 0:
-                continue
-            char_detections = self._run(self._ocr_session, candidate, self._ocr_conf)
-            if not char_detections:
-                continue
-
-            chars: list[tuple[float, float, float, str]] = []
-            confs: list[float] = []
-            for box, conf, cls in char_detections:
-                char = self._ocr_names.get(cls, "")
-                if not char:
-                    continue
-                x_center = (box[0] + box[2]) / 2
-                y_center = (box[1] + box[3]) / 2
-                height = box[3] - box[1]
-                chars.append((x_center, y_center, height, char))
-                confs.append(conf)
-
-            if not chars:
-                continue
-
-            avg_conf = sum(confs) / len(confs)
-            # Ưu tiên đọc được NHIỀU ký tự hơn (biển VN luôn 7-9 ký tự); bằng số lượng thì chọn conf cao hơn.
-            if len(chars) > best_count or (len(chars) == best_count and avg_conf > best_conf):
-                best_text = _assemble_plate_text(chars)
-                best_conf = avg_conf
-                best_count = len(chars)
+            text, avg_conf, count = self._ocr_candidate(candidate)
+            if count > best_count or (count == best_count and avg_conf > best_conf):
+                best_text, best_conf, best_count = text, avg_conf, count
+            if best_count >= self._GOOD_ENOUGH_CHAR_COUNT:
+                break
 
         return best_text, best_conf
+
+    # Biển VN thật KHÔNG BAO GIỜ có 6+ chữ số liên tiếp (tối đa 5 số trong cụm số cuối) -
+    # chuỗi rác do OCR đọc nhầm 1 box không-phải-biển thường dài bất thường và toàn số (đã
+    # tự đo: "59G163188", "59U116124" - 6-7 số liên tiếp). Lọc thẳng, không rủi ro chặn
+    # nhầm biển thật vì không format biển VN nào rơi vào trường hợp này.
+    _GARBAGE_DIGIT_RUN = re.compile(r"\d{6,}")
 
     def detect(self, frame_bgr: np.ndarray) -> list[PlateDetection]:
         try:
@@ -260,9 +280,23 @@ class YoloOnnxPlateRecognizer:
         except Exception:
             return []
 
+        # Camera cổng vào/ra chỉ chụp ĐÚNG 1 xe/lượt (1 camera = 1 làn) - chỉ OCR N box tự
+        # tin nhất, bỏ hẳn box quá nhỏ để không thể chứa ký tự đọc được. Xem
+        # core/config.py:Settings.plate_detector_max_boxes - vừa nhanh hơn (bớt lượt OCR
+        # thừa trên box nhiễu) vừa chính xác hơn (bớt nguồn sinh biển rác cạnh tranh
+        # confidence với biển thật ở rfid/service.py:_detect_plate_via_ai).
+        candidates = []
+        for box, det_conf, cls in plate_boxes:
+            x1, y1, x2, y2 = (int(v) for v in box)
+            if x2 - x1 < self._min_box_w or y2 - y1 < self._min_box_h:
+                continue
+            candidates.append((box, det_conf, cls))
+        candidates.sort(key=lambda item: item[1], reverse=True)
+        candidates = candidates[: self._max_boxes]
+
         results: list[PlateDetection] = []
         seen: set[str] = set()
-        for box, det_conf, _cls in plate_boxes:
+        for box, det_conf, _cls in candidates:
             x1, y1, x2, y2 = (int(v) for v in box)
             if x2 <= x1 or y2 <= y1:
                 continue
@@ -279,6 +313,8 @@ class YoloOnnxPlateRecognizer:
             if not plate or len(plate) < 4 or len(plate) > 12:
                 continue
             if not any(c.isdigit() for c in plate[:2]):
+                continue
+            if self._GARBAGE_DIGIT_RUN.search(plate):
                 continue
             if plate in seen:
                 continue

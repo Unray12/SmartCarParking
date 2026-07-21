@@ -63,7 +63,10 @@ Shutdown: dừng RFID reader + `camera_manager.shutdown()`.
 - `PlateRecognizer` — Protocol: `detect(frame_bgr) -> list[PlateDetection]`.
 - `normalize_plate(raw)` — uppercase + bỏ ký tự không phải `[A-Z0-9]`.
 - `load_plate_recognizer(spec)`: `module:Class` import động → PaddleOCR → Dummy (fallback).
-- **`YoloOnnxPlateRecognizer`** (mặc định, `.env`): YOLOv5 ONNX 2 giai đoạn — detect vùng biển → deskew (Hough) → detect TỪNG KÝ TỰ (30 class) → tự nhận 1 dòng/2 dòng → ghép qua `normalize_plate`. Output ONNX raw KHÔNG có NMS → tự decode + NMS numpy. Model ở `AI_MODELS_DIR` (`LP_detector.onnx` + `LP_ocr.onnx`). Xem [changelog.md](changelog.md) 2026-07-14 ANPR.
+- **`YoloOnnxPlateRecognizer`** (mặc định, `.env`): YOLOv5 ONNX 2 giai đoạn — detect vùng biển → deskew (Hough) → detect TỪNG KÝ TỰ (30 class) → tự nhận 1 dòng/2 dòng → ghép qua `normalize_plate`. Output ONNX raw KHÔNG có NMS → tự decode + NMS numpy. Model ở `AI_MODELS_DIR` (`LP_detector.onnx` + `LP_ocr.onnx`). Xem [changelog.md](changelog.md) 2026-07-14 ANPR, 2026-07-21 tối ưu.
+  - **Lọc box trước khi OCR** (`plate_detector_max_boxes`=2, `plate_min_box_width`/`plate_min_box_height`): 1 camera = 1 làn xe nên chỉ OCR N box tự tin nhất, bỏ box quá nhỏ (không thể chứa ký tự đọc được) — vừa nhanh (bớt lượt OCR thừa trên box nhiễu) vừa an toàn (bớt nguồn sinh biển rác).
+  - **Lọc chuỗi rác sau OCR**: bỏ chuỗi có ≥6 số liên tiếp (biển VN thật không có) — chặn các lần OCR đọc nhầm 1 box không-phải-biển ra chuỗi dài toàn số.
+  - **OCR candidate thử LẦN LƯỢT** (deskewed trước nếu có lệch, raw nếu không) thay vì luôn chạy CẢ 2 vô điều kiện — dừng ngay khi candidate đầu đã đọc được ≥6 ký tự (đủ tốt), không tốn thêm 1 lượt inference OCR đầy đủ nếu không cần.
 
 ## 9. Các module API (dưới `/api/v1`, đều cần JWT trừ ghi chú)
 

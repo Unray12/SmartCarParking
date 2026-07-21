@@ -106,6 +106,16 @@ class Settings(BaseSettings):
     plate_detector_imgsz: int = 640
     plate_detector_conf: float = 0.5
     plate_ocr_conf: float = 0.6
+    # Camera cổng vào/ra chỉ chụp ĐÚNG 1 xe/1 biển mỗi lượt (kiến trúc 1 camera = 1 làn) -
+    # nhưng detector hay trả về NHIỀU box "license_plate" trên 1 frame (nhiễu/vật thể nhỏ bị
+    # nhận nhầm) - đã tự đo trên ảnh thật: 1 frame ra 6 box, 2 box OCR ra chuỗi rác
+    # ("59G163188", "59U116124" - dài bất thường) với confidence gần bằng biển thật, suýt
+    # thắng trong max(detections, key=confidence) ở rfid/service.py - RỦI RO GÁN NHẦM BIỂN
+    # thật. Chỉ OCR tối đa N box tự tin nhất theo det_conf (giảm hẳn rác, đã verify riêng
+    # bước này đủ loại bỏ cả 2 box rác nói trên) - KHÔNG lọc theo kích thước box (từng thử,
+    # bỏ lại: biển ở xa/camera zoom rộng hợp lệ dù nhỏ, lọc cứng theo pixel làm bỏ sót biển
+    # thật tùy setup camera - xem changelog.md).
+    plate_detector_max_boxes: int = 2
 
     # RFID USB Serial
     rfid_usb_port: str = "/dev/ttyUSB0"

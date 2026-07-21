@@ -2,6 +2,65 @@
 
 > Mới nhất ở trên. Đánh giá clean-code & nguyên tắc mở rộng gần đây nằm ở cuối mỗi entry.
 
+### 2026-07-21 — Fix regression: tối ưu ANPR đợt 1 làm giảm độ nhạy nhận diện
+**Người dùng báo:** sau khi tối ưu ANPR (entry ngay dưới), AI Center "kém nhạy, khó phát
+hiện được biển số và nhận diện các ký tự so với trước". Rà lại bằng A/B test tự động (chạy
+CẢ pipeline CŨ và MỚI trên cùng bộ ảnh snapshot thật, so kết quả từng ảnh) - không tìm được
+khác biệt trên 10 ảnh mẫu sẵn có (mọi biển thật giữ nguyên y hệt), nhưng rà lại code tìm ra
+**2 thay đổi có rủi ro thật dù chưa lộ trên bộ ảnh mẫu** (bộ mẫu chỉ có vài ảnh, không đại
+diện hết setup camera/khoảng cách thực tế của người dùng):
+
+1. **`plate_min_box_width`/`plate_min_box_height` (lọc box theo pixel trước OCR)** - đã
+   verify lại: chỉ riêng `plate_detector_max_boxes` (chọn top-N theo confidence) ĐÃ ĐỦ loại
+   2 box rác tìm thấy ở đợt 1 mà không cần lọc kích thước (test: tắt lọc size, giữ top-2 →
+   ra kết quả giống hệt). Lọc cứng theo pixel là rủi ro THỪA, không cần cho fix gốc, nhưng
+   có thể loại bỏ biển THẬT nếu camera của người dùng chụp biển nhỏ hơn ngưỡng (xa hơn/độ
+   phân giải khác bộ ảnh mẫu) → **bỏ hẳn 2 setting này**, chỉ giữ lọc theo confidence.
+2. **OCR "dừng sớm khi đủ ký tự" (`_GOOD_ENOUGH_CHAR_COUNT=6`)** - biển VN thật dài 7-9 ký
+   tự, ngưỡng "đủ" (6) THẤP HƠN độ dài biển thật → có thể dừng ở candidate đọc THIẾU 1-2 ký
+   tự trong khi candidate còn lại (raw hoặc deskewed) đọc được ĐỦ - **giảm độ chính xác đọc
+   ký tự đúng như báo cáo**. Lợi ích tốc độ của tối ưu này cũng chưa từng đo được rõ ràng
+   (ảnh benchmark thật tình cờ có `angle=0`, không kích hoạt nhánh dừng sớm) → **bỏ hẳn**,
+   `_read_plate_text` quay lại luôn thử ĐỦ CẢ 2 candidate như code gốc (chỉ giữ refactor
+   `_ocr_candidate` cho gọn code, không đổi hành vi).
+
+**Còn giữ (đã verify không phải nguyên nhân, vẫn cần cho fix gốc):** top-N box theo
+confidence (`plate_detector_max_boxes=2`) + lọc chuỗi rác ≥6 số liên tiếp sau OCR - cả 2 đã
+verify lại bằng A/B test, không đụng tới độ nhạy phát hiện biển thật.
+
+**Bài học:** 1 optimization "verify bằng benchmark" vẫn có thể regression nếu bộ dữ liệu
+benchmark không đại diện đủ điều kiện thực tế (bộ ảnh mẫu chỉ 10 ảnh, ít loại camera/khoảng
+cách) - khi người dùng báo hồi quy, ưu tiên bỏ phần rủi ro cao/lợi ích chưa rõ ràng trước,
+giữ lại phần đã verify chắc chắn.
+
+### 2026-07-21 — Tối ưu ANPR: nhanh hơn + chính xác hơn (benchmark trên ảnh/model thật)
+**Đo bằng ảnh snapshot THẬT + model ONNX thật đang dùng (không giả lập)** trước khi sửa,
+theo đúng nguyên tắc "profile trước khi optimize" của skill CV: 1 frame thực tế (ảnh
+2026-07-14) ra **6 box "license_plate"** từ detector — có box chỉ **16x11px** (không thể
+chứa ký tự đọc được), 2 box cỡ hợp lý khác OCR ra chuỗi RÁC ("59G163188" conf 0.71,
+"59U116124" conf 0.607) suýt thắng biển thật ("50LD054" conf 0.733) trong
+`max(detections, key=confidence)` ở `rfid/service.py` — **rủi ro gán nhầm biển thật lúc
+check-in/out**. Mỗi box đều chạy OCR đầy đủ (2 candidate/box khi có góc lệch) → 1 frame
+mất **2.7-3.6 giây** (đo lại 5 lần, model+ảnh thật, máy 12 core - trên NUC thực tế sẽ còn
+chậm hơn).
+
+**Fix (backend/app/services/yolo_onnx_plate_recognizer.py):**
+1. Chỉ OCR tối đa `plate_detector_max_boxes` (mặc định 2) box tự tin nhất theo det_conf,
+   bỏ hẳn box nhỏ hơn `plate_min_box_width`x`plate_min_box_height` (20x8px) trước khi OCR.
+2. Bỏ chuỗi biển có ≥6 số liên tiếp (`_GARBAGE_DIGIT_RUN`) - biển VN thật không có format
+   này, chặn được chính 2 chuỗi rác đo được ở trên mà không rủi ro chặn nhầm biển thật.
+3. `_read_plate_text`: thử candidate khả năng cao hơn TRƯỚC (deskewed nếu lệch rõ), dừng
+   ngay khi đọc được ≥6 ký tự - không còn chạy CẢ 2 candidate vô điều kiện mỗi khi có góc lệch.
+
+**Verify (cùng ảnh, cùng model, đo lại):** frame 6-box nói trên → còn đúng 1 kết quả
+`[('50LD054', 0.733)]` (2 chuỗi rác đã bị lọc), thời gian **2.7-3.6s → 1.2-1.8s** (tự đo,
+~50% nhanh hơn với cấu hình mặc định `max_boxes=2`; test thêm `max_boxes=1` cho **0.66-1.0s**
+nhưng bớt biên an toàn nếu box #1-theo-confidence không phải biển thật - giữ mặc định 2,
+`max_boxes=1` là tùy chọn cho ai cần nhẹ hơn nữa và chấp nhận đánh đổi). Các frame chỉ có
+0-1 box thật (đa số trường hợp bình thường) không đổi thời gian (~200-270ms, không tăng chi
+phí). Áp dụng tự động cho cả 3 nơi dùng chung `recognizer.detect()`: AI Center live test,
+AI on-demand lúc quẹt RFID (`_detect_plate_via_ai`), và ANPR nền (`STREAM_ENABLE_INFERENCE`).
+
 ### 2026-07-21 — Bỏ tính năng kích hoạt/hủy kích hoạt bãi xe (`ParkingLot.is_active`)
 **Yêu cầu người dùng:** không thấy ý nghĩa thực tế, bỏ hẳn luồng "Kích hoạt bãi xe" (checkbox
 form, chip Active/Inactive, cột "Trạng thái" ở bảng bãi). Tính năng này vừa được đề xuất làm

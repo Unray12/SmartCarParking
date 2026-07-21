@@ -155,8 +155,10 @@ async def disable_api_cache(request: Request, call_next):
 
 
 @app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+def health() -> dict[str, object]:
+    # rfid_test_mode_enabled: cờ KHÔNG nhạy cảm (chỉ để FE biết có hiện nút "Giả lập quét
+    # RFID" ở Parking Lots hay không) - trả qua endpoint public sẵn có, không cần thêm route.
+    return {"status": "ok", "rfid_test_mode_enabled": settings.rfid_test_mode_enabled}
 
 
 app.include_router(api_router)

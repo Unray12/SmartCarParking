@@ -17,8 +17,20 @@ const lotDetailState = {
   exitSession: null,
   // Theo dõi camera mỗi hướng đang stream để poll định kỳ không tear-down (chống chớp khung).
   streamEntryCamId: null,
-  streamExitCamId: null
+  streamExitCamId: null,
+  // Thẻ giả lập đang "trong bãi" (đã quẹt Vào, chưa quẹt Ra) hay chưa - xem nút
+  // "Giả lập quét RFID". Suy ra từ session list của LOT đang mở (xem openParkingLotDetail);
+  // theo đúng mô tả người dùng: mặc định chỉ theo dõi 1 phiên vào/ra tại 1 thời điểm
+  // (thẻ giả lập là thẻ CHUNG, quẹt Vào ở bãi khác trước sẽ bị backend từ chối already_in).
+  testCardActive: false,
 };
+
+// Thẻ RFID CỐ ĐỊNH dùng riêng cho nút "Giả lập quét RFID" ở trang Parking Lots - tách biệt
+// hẳn với thẻ thật để không lẫn vào lịch sử thật, dễ nhận ra khi xem log/lịch sử.
+const TEST_RFID_CARD_ID = 'WEBTEST0001';
+// Cờ do backend cấp qua GET /health (Settings.rfid_test_mode_enabled, mặc định tắt) - chỉ
+// hiện nút giả lập khi bật, tránh lộ nút test cho người vận hành thật. Đọc 1 lần lúc init.
+let rfidTestModeEnabled = false;
 const captureStatusTimers = { entry: null, exit: null };
 // Dedup key riêng cho pulse "ok" (quẹt thành công) và pulse "warn" (quẹt bị từ chối) -
 // PHẢI tách riêng 2 dict này. Nếu dùng chung 1 dict theo `kind`, mỗi lần đổi qua lại
@@ -515,6 +527,16 @@ export function stopCaptureStatusPolling() {
   }
 }
 
+// Cập nhật hiện/ẩn + nhãn nút "Giả lập quét RFID" theo cờ backend + trạng thái thẻ giả lập
+// hiện tại (đang "trong bãi" hay chưa). Gọi lại mỗi khi mở/refresh chi tiết bãi.
+function renderSimulateRfidButton() {
+  if (!els.lotSimulateRfidBtn) return;
+  els.lotSimulateRfidBtn.style.display = rfidTestModeEnabled && lotDetailState.currentLot ? '' : 'none';
+  els.lotSimulateRfidBtn.textContent = lotDetailState.testCardActive
+    ? 'Giả lập quét RFID (Ra)'
+    : 'Giả lập quét RFID (Vào)';
+}
+
 export async function openParkingLotDetail(lotId) {
   let data;
   try {
@@ -535,6 +557,9 @@ export async function openParkingLotDetail(lotId) {
   els.lotDetailMeta.textContent = `Cam vào: ${cameraNameById(data.lot.entry_camera_id)} | Cam ra: ${cameraNameById(data.lot.exit_camera_id)} | Cổng RFID: ${rfidPortLabel}`;
   els.lotDetailAiToggle.disabled = false;
   els.lotDetailAiToggle.checked = Boolean(data.lot.ai_enabled);
+  lotDetailState.testCardActive = (data.sessions || []).some(
+    (s) => s.rfid_card === TEST_RFID_CARD_ID && s.status === 'in');
+  renderSimulateRfidButton();
   renderLotDetailLogs(data.sessions || []);
   // 2 ô capture + chip trạng thái không còn lấy từ đây (nhịp poll chậm, theo
   // appState.settings.refreshSeconds) - đã tách sang poll riêng tần suất cao hơn hẳn, xem
@@ -572,6 +597,12 @@ export async function refreshSnapshotList() {
 
 export function initParking(opts = {}) {
   hooks.onLotsLoaded = opts.onLotsLoaded || null;
+
+  // Đọc 1 lần lúc khởi động: cờ bật/tắt nút "Giả lập quét RFID" (Settings.rfid_test_mode_enabled,
+  // mặc định tắt). /health là endpoint public sẵn có, không cần thêm route riêng.
+  api('/health')
+    .then((res) => { rfidTestModeEnabled = Boolean(res?.rfid_test_mode_enabled); renderSimulateRfidButton(); })
+    .catch(() => {});
 
   // Khôi phục bãi đang mở chi tiết từ phiên trước: chỉ set id, switchView('parking') ở
   // main.js sẽ tự openParkingLotDetail nếu getSelectedLotId() có giá trị (và bãi còn tồn tại).
@@ -621,11 +652,40 @@ export function initParking(opts = {}) {
     els.lotDetailMeta.textContent = 'Chọn bãi xe từ danh sách để xem dữ liệu riêng.';
     els.lotDetailAiToggle.checked = false;
     els.lotDetailAiToggle.disabled = true;
+    renderSimulateRfidButton();
     els.lotDetailLogBody.innerHTML = '<tr><td colspan="6" class="empty">Chưa có dữ liệu</td></tr>';
     setCaptureStatusIdle();
     setLotPlaceholder('entry', 'Chưa có camera vào');
     setLotPlaceholder('exit', 'Chưa có camera ra');
   });
+
+  if (els.lotSimulateRfidBtn) {
+    els.lotSimulateRfidBtn.addEventListener('click', async () => {
+      const lot = lotDetailState.currentLot;
+      if (!lot) return;
+      const direction = lotDetailState.testCardActive ? 'out' : 'in';
+      try {
+        const result = await withButtonBusy(els.lotSimulateRfidBtn, 'Đang gửi…', () => api('/api/v1/rfid-events', {
+          method: 'POST',
+          body: JSON.stringify({
+            card_id: TEST_RFID_CARD_ID,
+            direction,
+            lot_id: lot.id,
+            source: 'parking-lot-simulate-button',
+          }),
+        }));
+        if (result.status === 'checked_in' || result.status === 'checked_out') {
+          lotDetailState.testCardActive = result.status === 'checked_in';
+        }
+        renderSimulateRfidButton();
+        const rejected = ['already_in', 'not_found', 'plate_mismatch'].includes(result.status);
+        notify(`Giả lập quẹt RFID (${direction === 'in' ? 'Vào' : 'Ra'}): ${result.status}`, rejected ? 'warn' : 'success');
+        await openParkingLotDetail(lot.id);
+      } catch (err) {
+        notify(`Giả lập quét RFID lỗi: ${err.message}`, 'error');
+      }
+    });
+  }
 
   els.lotDetailAiToggle.addEventListener('change', async () => {
     const lot = lotDetailState.currentLot;

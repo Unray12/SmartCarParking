@@ -2,6 +2,26 @@
 
 > Mới nhất ở trên. Đánh giá clean-code & nguyên tắc mở rộng gần đây nằm ở cuối mỗi entry.
 
+### 2026-07-21 — Nút "Giả lập quét RFID" ở Parking Lots (test không cần đầu đọc thật)
+**Yêu cầu:** thêm 1 cờ bật/tắt (mặc định tắt) + nút nhỏ ở trang Parking Lots, bấm 1 lần =
+quẹt Vào, bấm lần 2 = quẹt Ra - test nhanh luồng RFID không cần cắm đầu đọc thật.
+
+**Đổi gì:**
+- `core/config.py`: `Settings.rfid_test_mode_enabled` (mặc định `False`, `.env`:
+  `RFID_TEST_MODE_ENABLED`). Expose qua `GET /health` (public, sẵn có) - FE đọc 1 lần lúc
+  `initParking()`, không cần route riêng.
+- FE `parking.js`: nút `#lotSimulateRfidBtn` trong panel "Chi tiết bãi xe" (ẩn hoàn toàn khi
+  cờ tắt). Dùng 1 thẻ cố định `WEBTEST0001` (không phải thẻ thật, dễ nhận ra trong lịch sử);
+  trạng thái Vào/Ra suy từ session list của bãi đang mở (`lotDetailState.testCardActive`),
+  KHÔNG dùng biến toggle client-side độc lập - tự đồng bộ đúng dù refresh trang. POST thẳng
+  `/api/v1/rfid-events` có sẵn, `source: "parking-lot-simulate-button"` để phân biệt trong
+  log. Sau mỗi lần bấm, gọi lại `openParkingLotDetail` để đồng bộ log/occupancy ngay.
+
+**Verify (Playwright thật, bật cờ tạm thời qua `.env` rồi tắt lại):** nút ẩn khi cờ tắt,
+hiện khi bật; bấm lần 1 → nhãn đổi "(Vào)"→"(Ra)", tạo session `status=in`; bấm lần 2 →
+nhãn đổi lại "(Vào)", session đóng `status=out` (entry/exit_time cách nhau ~1s đúng 2 lần
+bấm). Đã dọn dữ liệu test + trả cờ về `false`.
+
 ### 2026-07-21 — Fix regression: tối ưu ANPR đợt 1 làm giảm độ nhạy nhận diện
 **Người dùng báo:** sau khi tối ưu ANPR (entry ngay dưới), AI Center "kém nhạy, khó phát
 hiện được biển số và nhận diện các ký tự so với trước". Rà lại bằng A/B test tự động (chạy

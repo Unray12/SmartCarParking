@@ -114,6 +114,7 @@ export const els = {
   lotDetailTitle: document.getElementById('lotDetailTitle'),
   lotDetailMeta: document.getElementById('lotDetailMeta'),
   lotDetailAiToggle: document.getElementById('lotDetailAiToggle'),
+  lotSimulateRfidBtn: document.getElementById('lotSimulateRfidBtn'),
   lotDetailCloseBtn: document.getElementById('lotDetailCloseBtn'),
   lotEntryVideo: document.getElementById('lotEntryVideo'),
   lotEntryStreamStatus: document.getElementById('lotEntryStreamStatus'),

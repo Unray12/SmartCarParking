@@ -29,6 +29,10 @@ class Settings(BaseSettings):
     rfid_link_window_seconds: int = 30
     cors_origins: str = "*"
     plate_recognizer: str = ""
+    # Bật nút "Giả lập quét RFID" ở trang Parking Lots (không cần đầu đọc thật để test
+    # nhanh luồng vào/ra). Mặc định TẮT - chỉ bật khi cần test, tránh lộ nút giả lập cho
+    # người dùng vận hành thật. Xem modules/parking_lots/controller.py, frontend parking.js.
+    rfid_test_mode_enabled: bool = False
 
     # Parking fee (tính phí gửi xe)
     parking_currency: str = "đ"

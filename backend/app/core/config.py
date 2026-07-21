@@ -120,6 +120,15 @@ class Settings(BaseSettings):
     # bỏ lại: biển ở xa/camera zoom rộng hợp lệ dù nhỏ, lọc cứng theo pixel làm bỏ sót biển
     # thật tùy setup camera - xem changelog.md).
     plate_detector_max_boxes: int = 2
+    # test_camera_ai() (AI Center live test + on-demand lúc quẹt RFID) trước đây chỉ chạy
+    # detect() trên ĐÚNG 1 frame rồi trả kết quả ngay dù rỗng - đã tự verify bằng ảnh test
+    # thật: rất nhiều lượt quẹt bị "NONE" (không đọc được biển) nhưng chạy lại NHẬN DIỆN
+    # ĐÚNG khi cho thử trên frame chụp ngay SAU đó (chỉ cách nhau vài trăm ms) - lỗi do vận
+    # may thời điểm (rung tay/xe đang di chuyển qua khung/camera đang refocus), không phải
+    # model kém. Thử lại trên vài frame MỚI liên tiếp trước khi bỏ cuộc - dừng ngay khi có
+    # kết quả nên KHÔNG tốn thêm gì ở trường hợp phổ biến (frame đầu đã đọc được).
+    plate_detect_retry_attempts: int = 3
+    plate_detect_retry_interval_seconds: float = 0.3
 
     # RFID USB Serial
     rfid_usb_port: str = "/dev/ttyUSB0"

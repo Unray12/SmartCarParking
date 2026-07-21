@@ -2,6 +2,44 @@
 
 > Mới nhất ở trên. Đánh giá clean-code & nguyên tắc mở rộng gần đây nằm ở cuối mỗi entry.
 
+### 2026-07-21 — Fix nguyên nhân GỐC của phần lớn lượt quẹt AI bị "NONE"
+**Người dùng báo:** capture ảnh rồi nhận diện biển số vẫn kém, ảnh nghiêng lệch chưa nhạy -
+cung cấp 35 ảnh test thật (`snapshots_store/20260721/`, webcam chụp lại ảnh biển số hiển thị
+trên màn hình khác). Rà bằng cách chạy LẠI recognizer trên đúng các ảnh đã lưu.
+
+**Phát hiện quan trọng nhất (bất ngờ):** đa số ảnh có tên file `..._NONE_...` (lúc quẹt thẻ
+AI không đọc được biển) nhưng khi chạy LẠI y nguyên file ảnh đã lưu đó qua recognizer ngay
+lúc rà soát → đọc ĐÚNG với confidence 0.83-0.95, kể cả biển lệch tới **28°**. Tức là:
+**model/deskew hiện tại đã đủ tốt** - vấn đề không phải chất lượng nhận diện, mà là
+**`test_camera_ai()` (camera_stream.py) chỉ thử ĐÚNG 1 FRAME rồi bỏ cuộc ngay nếu frame đó
+không đọc được** (rung tay/xe đang di chuyển qua khung/camera đang refocus đúng khoảnh khắc
+quẹt thẻ) - cùng khung cảnh chụp lại vài trăm ms sau lại đọc được hoàn toàn bình thường.
+
+**Fix 1 (nguyên nhân gốc, tác động lớn nhất):** `test_camera_ai()` thử lại trên vài **frame
+MỚI** liên tiếp (`plate_detect_retry_attempts`=3, cách nhau `plate_detect_retry_interval_seconds`=0.3s)
+nếu frame đầu không ra kết quả, trước khi trả "không đọc được". Dừng ngay khi có kết quả -
+trường hợp phổ biến (frame đầu đã đọc được) không tốn thêm gì.
+
+**Fix 2 (xử lý ảnh, cho crop tương phản kém/thiếu sáng):** thêm `_enhance_for_ocr` - CLAHE
+(Contrast Limited Adaptive Histogram Equalization) trên kênh L (LAB) + upscale CUBIC nếu crop
+nhỏ - dùng làm candidate BỔ SUNG khi 2 candidate gốc (raw/deskewed) đọc được < 7 ký tự. **Chi
+tiết quan trọng phát hiện khi verify** (lần đầu code SAI, tự phát hiện qua A/B test trước khi
+báo xong): phải tính lại góc lệch và deskew TRÊN BẢN ĐÃ TĂNG CƯỜNG, không chỉ tăng cường rồi
+OCR thẳng - vì crop gốc tương phản kém khiến Hough (`_compute_skew_angle`) ước lượng SAI góc
+(ra 0° dù thực tế lệch ~12°), CLAHE làm rõ cạnh viền chữ mới giúp ước lượng đúng góc thật.
+
+**Đã KHÔNG cố fix (giới hạn phần cứng, không phải thuật toán, verify bằng ảnh thật):**
+- Crop quá nhỏ (ví dụ 51x26px) - không đủ pixel gốc để phục hồi ký tự dù dùng thuật toán
+  tăng cường nào (đã tự test CLAHE/sharpen/upscale, không giúp được crop cỡ này).
+- Ảnh mất nét hoàn toàn (out-of-focus thật, webcam đang refocus) - không có box nào ở
+  confidence 0.15 cũng không thấy - đúng hành vi mong đợi (ảnh hỏng phải trả "không đọc được"
+  chứ không nên tự chế ra kết quả), đây là lỗi vị trí/tiêu cự camera lúc chụp, không sửa được
+  bằng code phía sau.
+
+**Verify:** chạy lại toàn bộ 35 ảnh test + 10 ảnh benchmark cũ (2026-07-14/07-18) sau khi
+sửa - ca lỗi cụ thể được báo (biển "98AF00127" đọc sai thành "9A-0") nay đọc đúng; 0 ca đang
+đúng bị hỏng thêm (regression-free, so từng ảnh).
+
 ### 2026-07-21 — Nút "Giả lập quét RFID" ở Parking Lots (test không cần đầu đọc thật)
 **Yêu cầu:** thêm 1 cờ bật/tắt (mặc định tắt) + nút nhỏ ở trang Parking Lots, bấm 1 lần =
 quẹt Vào, bấm lần 2 = quẹt Ra - test nhanh luồng RFID không cần cắm đầu đọc thật.

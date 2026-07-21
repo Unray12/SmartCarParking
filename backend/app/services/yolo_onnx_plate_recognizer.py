@@ -138,6 +138,24 @@ def _deskew(img_bgr: np.ndarray) -> np.ndarray | None:
     return cv2.warpAffine(img_bgr, matrix, (w, h), flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_REPLICATE)
 
 
+def _enhance_for_ocr(img_bgr: np.ndarray) -> np.ndarray:
+    """Tăng cường crop biển thiếu sáng/tương phản kém trước khi OCR - CLAHE (Contrast
+    Limited Adaptive Histogram Equalization) trên kênh L (LAB) + upscale bằng CUBIC (giữ
+    chi tiết cạnh ký tự tốt hơn LINEAR khi crop nhỏ phải phóng to nhiều). Đã tự verify trên
+    ảnh crop thật: biển đọc SAI ("9A-0") do tương phản kém → CLAHE sửa đúng ("98AF00127",
+    conf 0.67→0.88). Chỉ dùng làm candidate BỔ SUNG (xem _read_plate_text) - CLAHE có thể
+    khuếch đại nhiễu trên crop vốn đã rõ, không thay hẳn candidate gốc."""
+    h, w = img_bgr.shape[:2]
+    max_side = max(h, w)
+    scale = max(1.0, 200.0 / max_side) if max_side > 0 else 1.0
+    if scale > 1.0:
+        img_bgr = cv2.resize(img_bgr, (int(w * scale), int(h * scale)), interpolation=cv2.INTER_CUBIC)
+    lab = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2LAB)
+    l, a, b = cv2.split(lab)
+    l = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8)).apply(l)
+    return cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2BGR)
+
+
 def _assemble_plate_text(chars: list[tuple[float, float, float, str]]) -> str:
     """chars: (x_center, y_center, box_height, char). Tự nhận diện biển 1 dòng / 2 dòng như helper.py gốc."""
     if not chars:
@@ -244,6 +262,10 @@ class YoloOnnxPlateRecognizer:
             return "", 0.0, 0
         return _assemble_plate_text(chars), sum(confs) / len(confs), len(chars)
 
+    # Biển VN thật luôn 7-9 ký tự - đọc được ÍT HƠN mức này nghĩa là chưa chắc đã đủ, đáng
+    # thử thêm candidate tăng cường (CLAHE) trước khi chấp nhận kết quả.
+    _MIN_PLAUSIBLE_CHARS = 7
+
     def _read_plate_text(self, plate_crop: np.ndarray) -> tuple[str, float]:
         # Luôn thử ĐỦ CẢ 2 candidate (raw + deskewed nếu có góc lệch) rồi chọn kết quả đọc
         # được NHIỀU ký tự hơn - đã thử dừng sớm khi 1 candidate đọc được "đủ" ký tự để tiết
@@ -260,6 +282,26 @@ class YoloOnnxPlateRecognizer:
             text, avg_conf, count = self._ocr_candidate(candidate)
             if count > best_count or (count == best_count and avg_conf > best_conf):
                 best_text, best_conf, best_count = text, avg_conf, count
+
+        # 2 candidate trên vẫn CHƯA đọc đủ ký tự hợp lý (crop mờ/thiếu sáng/tương phản kém)
+        # -> thử thêm candidate tăng cường (CLAHE + upscale, xem _enhance_for_ocr). Tính lại
+        # góc lệch TRÊN BẢN ĐÃ TĂNG CƯỜNG rồi thử deskew nốt bản đó - đã tự verify: crop gốc
+        # tương phản kém khiến Hough (_compute_skew_angle) ước lượng SAI góc lệch (~0° dù
+        # thực tế lệch ~12°) nên deskew ở bước trên không sửa được; sau khi CLAHE làm rõ cạnh
+        # viền chữ, ước lượng lại góc mới đúng, chỉ deskew(enhanced) mới đọc đủ ("9A-0" 3 ký
+        # tự -> "98AF00127" 9 ký tự đúng, enhanced-không-deskew chỉ ra "09" 2 ký tự - không
+        # đủ). Chỉ chạy khi cần (tốn thêm tối đa 2 lượt OCR) - crop quá nhỏ/mất nét thật vẫn
+        # không phục hồi được (không đủ pixel gốc, giới hạn phần cứng không phải thuật toán).
+        if best_count < self._MIN_PLAUSIBLE_CHARS:
+            enhanced = _enhance_for_ocr(plate_crop)
+            enhanced_candidates = [enhanced]
+            deskewed_enhanced = _deskew(enhanced)
+            if deskewed_enhanced is not None:
+                enhanced_candidates.append(deskewed_enhanced)
+            for candidate in enhanced_candidates:
+                text, avg_conf, count = self._ocr_candidate(candidate)
+                if count > best_count or (count == best_count and avg_conf > best_conf):
+                    best_text, best_conf, best_count = text, avg_conf, count
 
         return best_text, best_conf
 

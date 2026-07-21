@@ -63,10 +63,11 @@ Shutdown: dừng RFID reader + `camera_manager.shutdown()`.
 - `PlateRecognizer` — Protocol: `detect(frame_bgr) -> list[PlateDetection]`.
 - `normalize_plate(raw)` — uppercase + bỏ ký tự không phải `[A-Z0-9]`.
 - `load_plate_recognizer(spec)`: `module:Class` import động → PaddleOCR → Dummy (fallback).
-- **`YoloOnnxPlateRecognizer`** (mặc định, `.env`): YOLOv5 ONNX 2 giai đoạn — detect vùng biển → deskew (Hough) → detect TỪNG KÝ TỰ (30 class) → tự nhận 1 dòng/2 dòng → ghép qua `normalize_plate`. Output ONNX raw KHÔNG có NMS → tự decode + NMS numpy. Model ở `AI_MODELS_DIR` (`LP_detector.onnx` + `LP_ocr.onnx`). Xem [changelog.md](changelog.md) 2026-07-14 ANPR, 2026-07-21 tối ưu (2 lượt, xem đợt 2 sửa lại đợt 1 gây giảm độ nhạy).
+- **`YoloOnnxPlateRecognizer`** (mặc định, `.env`): YOLOv5 ONNX 2 giai đoạn — detect vùng biển → deskew (Hough) → detect TỪNG KÝ TỰ (30 class) → tự nhận 1 dòng/2 dòng → ghép qua `normalize_plate`. Output ONNX raw KHÔNG có NMS → tự decode + NMS numpy. Model ở `AI_MODELS_DIR` (`LP_detector.onnx` + `LP_ocr.onnx`). Xem [changelog.md](changelog.md) 2026-07-14 ANPR, 2026-07-21 (3 đợt: tối ưu → fix regression → xử lý ảnh + fix nguyên nhân gốc "NONE").
   - **Chỉ OCR top-N box theo confidence** (`plate_detector_max_boxes`=2): 1 camera = 1 làn xe, chỉ OCR N box tự tin nhất theo det_conf — KHÔNG lọc theo kích thước pixel (đã thử rồi bỏ: biển ở xa/camera zoom rộng hợp lệ dù nhỏ, lọc cứng theo pixel làm bỏ sót biển thật tùy setup camera).
   - **Lọc chuỗi rác sau OCR**: bỏ chuỗi có ≥6 số liên tiếp (biển VN thật không có) — chặn các lần OCR đọc nhầm 1 box không-phải-biển ra chuỗi dài toàn số.
-  - `_read_plate_text` luôn thử ĐỦ CẢ 2 candidate (raw + deskewed) như code gốc — đã thử tối ưu "dừng sớm khi đủ ký tự" rồi bỏ: ngưỡng "đủ" luôn thấp hơn độ dài biển thật (7-9 ký tự) nên có thể dừng sớm ở kết quả thiếu ký tự.
+  - `_read_plate_text` luôn thử ĐỦ CẢ 2 candidate (raw + deskewed) như code gốc, SAU ĐÓ nếu vẫn < 7 ký tự (biển VN thật 7-9 ký tự) thử thêm candidate tăng cường: `_enhance_for_ocr` (CLAHE trên kênh L + upscale CUBIC nếu crop nhỏ) rồi tính lại góc lệch + deskew TRÊN BẢN ĐÃ TĂNG CƯỜNG (quan trọng: crop gốc tương phản kém khiến Hough ước lượng sai góc lệch, CLAHE làm rõ cạnh viền chữ mới ước lượng đúng được).
+  - **`test_camera_ai()` (camera_stream.py) thử lại trên vài frame MỚI** (`plate_detect_retry_attempts`=3, cách nhau `plate_detect_retry_interval_seconds`=0.3s) nếu frame đầu không đọc được biển, thay vì bỏ cuộc ngay sau 1 frame — xem changelog.md 2026-07-21 (nguyên nhân gốc phần lớn lượt quẹt bị "NONE": không phải model kém, mà 1 frame đơn lẻ dễ bị mờ tạm thời trong khi frame chụp cách đó vài trăm ms đọc đúng hoàn toàn).
 
 ## 9. Các module API (dưới `/api/v1`, đều cần JWT trừ ghi chú)
 

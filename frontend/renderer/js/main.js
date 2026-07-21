@@ -5,6 +5,7 @@ import { els } from './dom.js';
 import { notify, withButtonBusy } from './ui.js';
 import { initLayout, applySettingsToForm, applySidebarUiState, closeSidebarMobile } from './layout.js';
 import { initAccount, renderUserState, isAuthenticated, goToLogin } from './account.js';
+import { initConfirmDialog } from './confirm-dialog.js';
 import { createCameraModule } from './camera.js';
 import { createLogModule } from './logs.js';
 
@@ -255,6 +256,7 @@ async function bootstrap() {
   // Gắn sự kiện cho từng module/trang.
   bindGlobalEvents();
   initLayout();
+  initConfirmDialog();
   initAccount({ onLogout: stopApp });
   history.initHistory();
   reports.initReports();

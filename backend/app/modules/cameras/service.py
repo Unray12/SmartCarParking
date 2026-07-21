@@ -3,11 +3,15 @@ from __future__ import annotations
 from datetime import datetime
 
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.modules.cameras.model import Camera
 from app.modules.cameras.schema import CameraCreate, CameraOut, CameraUpdateRequest
+from app.modules.parking_lots.model import ParkingLot
+from app.modules.plates.model import PlateRead
+from app.modules.sessions.model import ParkingSession
 from app.services.camera_stream import CameraStreamManager
 
 
@@ -73,8 +77,38 @@ def toggle_camera(db: Session, camera_id: int, enabled: bool, camera_manager: Ca
 def delete_camera(db: Session, camera_id: int, camera_manager: CameraStreamManager) -> dict[str, bool]:
     camera = _get_camera_or_404(db, camera_id)
 
+    # Camera gắn trong phiên gửi xe (ảnh chụp vào/ra) là lịch sử đã CHỐT - CHẶN xóa cứng,
+    # hướng dẫn dùng nút Tắt (Camera.enabled=false, đã có sẵn) để ngừng camera mà không mất
+    # lịch sử. Cùng nguyên tắc đã áp dụng cho xóa bãi xe (2026-07-21).
+    session_refs = db.scalar(
+        select(func.count(ParkingSession.id)).where(
+            or_(ParkingSession.entry_camera_id == camera_id, ParkingSession.exit_camera_id == camera_id)
+        )
+    ) or 0
+    if session_refs:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                f"Camera còn trong {session_refs} phiên gửi xe (ảnh chụp vào/ra), không thể xóa. "
+                "Dùng nút Tắt để ngừng camera mà vẫn giữ lịch sử."
+            ),
+        )
+
+    # Không còn trong lịch sử phiên -> an toàn dọn: bỏ tham chiếu ở bãi xe (chỉ là CẤU HÌNH
+    # hiện tại - camera vào/ra đang gán, không phải lịch sử - bãi vẫn còn, chỉ mất camera đã
+    # gán, admin chọn lại camera khác sau) + xóa log nhận diện biển số rời (plate_reads chưa
+    # từng gắn vào phiên nào, không phải lịch sử phí/doanh thu).
+    db.execute(update(ParkingLot).where(ParkingLot.entry_camera_id == camera_id).values(entry_camera_id=None))
+    db.execute(update(ParkingLot).where(ParkingLot.exit_camera_id == camera_id).values(exit_camera_id=None))
+    db.execute(delete(PlateRead).where(PlateRead.camera_id == camera_id))
+
     db.delete(camera)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Camera đang được sử dụng, không thể xóa.")
+
     camera_manager.remove_camera(camera_id)
     return {"ok": True}
 

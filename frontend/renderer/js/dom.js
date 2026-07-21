@@ -38,6 +38,14 @@ export const els = {
   cameraEditCancelBtn: document.getElementById('cameraEditCancelBtn'),
   cameraEditCloseBtn: document.getElementById('cameraEditCloseBtn'),
 
+  confirmModal: document.getElementById('confirmModal'),
+  confirmModalTitle: document.getElementById('confirmModalTitle'),
+  confirmModalIcon: document.getElementById('confirmModalIcon'),
+  confirmModalMessage: document.getElementById('confirmModalMessage'),
+  confirmModalCancelBtn: document.getElementById('confirmModalCancelBtn'),
+  confirmModalConfirmBtn: document.getElementById('confirmModalConfirmBtn'),
+  confirmModalCloseBtn: document.getElementById('confirmModalCloseBtn'),
+
   sessionBody: document.getElementById('sessionBody'),
   plateBody: document.getElementById('plateBody'),
   mCamerasTotal: document.getElementById('mCamerasTotal'),
@@ -95,7 +103,6 @@ export const els = {
   lotCapacity: document.getElementById('lotCapacity'),
   lotEntryCamera: document.getElementById('lotEntryCamera'),
   lotExitCamera: document.getElementById('lotExitCamera'),
-  lotIsActive: document.getElementById('lotIsActive'),
   lotAiEnabled: document.getElementById('lotAiEnabled'),
   lotRfidPort: document.getElementById('lotRfidPort'),
   lotSubmitBtn: document.getElementById('lotSubmitBtn'),

@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from sqlalchemy import select, union_all
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
+from app.modules.auth.security import create_snapshot_token
 from app.modules.logs.model import LogEntry, LogType
 from app.modules.plates.model import PlateRead
 from app.modules.rfid.model import RfidEvent
@@ -19,7 +21,9 @@ def _to_snapshot_url(path: str | None) -> str | None:
         return None
     folder = parts[-2]
     filename = parts[-1]
-    return f"/api/v1/snapshots/files/{folder}/{filename}"
+    # Token khoá cứng vào đúng path này - xem parking_lots/service.py:resolve_snapshot_path_to_url.
+    token = create_snapshot_token(f"{folder}/{filename}", get_settings().snapshot_token_ttl_seconds)
+    return f"/api/v1/snapshots/files/{folder}/{filename}?token={token}"
 
 
 def get_recent_logs(db: Session, limit: int = 100, hours: int = 24) -> list[LogEntry]:

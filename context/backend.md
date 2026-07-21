@@ -13,7 +13,7 @@
 | `parking_sessions` | sessions/model.py | id, plate, rfid_card, entry_time, exit_time, status("in"/"out"), lot_id(FK), entry_camera_id, exit_camera_id, entry_snapshot_path, exit_snapshot_path, **fee**, **duration_minutes**, **ai_plate_match**, **ai_exit_plate** |
 | `rfid_events` | rfid/model.py | id, card_id, direction, source, received_at, payload_json, **lot_id**(FK) |
 | `rfid_cards` | rfid/model.py | id, card_id(unique), plate, owner_name, is_active, created_at |
-| `parking_lots` | parking_lots/model.py | id, name(unique), **capacity**, entry_camera_id, exit_camera_id, is_active, **ai_enabled**, **rfid_usb_port**, created_at, updated_at |
+| `parking_lots` | parking_lots/model.py | id, name(unique), **capacity**, entry_camera_id, exit_camera_id, **ai_enabled**, **rfid_usb_port**, created_at, updated_at. Cột `is_active` cũ vẫn tồn tại vật lý trong DB (không có gì để xoá cột trong migration append-only) nhưng KHÔNG còn dùng ở code nào (bỏ 2026-07-21) |
 | `admin_users` | auth/model.py | id, username(unique), password_hash (pbkdf2_sha256), created_at, updated_at — seed admin/admin |
 
 - `LogEntry`/`LogType` (logs/model.py) **không phải bảng** — object thuần gom log nhiều bảng.
@@ -74,6 +74,6 @@ Shutdown: dừng RFID reader + `camera_manager.shutdown()`.
 - **sessions**: `GET /sessions?active_only&limit` — `compute_fee`/`compute_duration_minutes`; phí/thời gian CHỐT lúc check-out; map `__NONE__`→null.
 - **dashboard**: `GET /dashboard/summary` (camera/session/vào-ra/capacity/occupancy/revenue), `GET /dashboard/stats?days=N` (daily/by_hour/avg_duration/revenue).
 - **logs**: `GET /logs?limit&hours` — gom RfidEvent + PlateRead + ParkingSession → `LogEntry`, kèm `*_snapshot_url`.
-- **parking_lots**: CRUD `/parking-lots` (tên unique, capacity, occupancy), `GET /snapshots`, `GET /{id}/overview`, `GET /{id}/capture-status` (nhẹ, cho poll chip realtime), `GET /snapshots/files/{folder}/{filename}` (public, chặn path traversal). ⚠️ `delete_parking_lot` bắt `IntegrityError` → 409 (không cho xóa bãi còn lịch sử phiên).
+- **parking_lots**: CRUD `/parking-lots` (tên unique, capacity, occupancy), `GET /snapshots`, `GET /{id}/overview`, `GET /{id}/capture-status` (nhẹ, cho poll chip realtime), `GET /snapshots/files/{folder}/{filename}` (chặn path traversal + `get_snapshot_access`: header Bearer JWT thường HOẶC token snapshot riêng khoá theo đúng path, hạn ngắn — KHÔNG public, xem mục 0.5/12 overview.md). `delete_parking_lot(force=False)`: còn `ParkingSession` (bất kỳ trạng thái) → 409 kèm số xe đang gửi/tổng phiên, để FE hỏi lại người dùng; gọi lại `force=True` → xóa bãi nhưng GIỮ LẠI log (`ParkingSession`/`RfidEvent` chỉ bị `UPDATE ... SET lot_id=NULL`, không xóa dữ liệu). `delete_camera` (cameras/service.py) cùng nguyên tắc: còn `ParkingSession` tham chiếu → 409; chỉ còn gắn ở cấu hình `ParkingLot.entry/exit_camera_id` hoặc `plate_reads` rời → xóa kèm gỡ tham chiếu (set NULL ở lot, xóa plate_reads đó). Xem [changelog.md](changelog.md) 2026-07-21.
 
 > **Bảo vệ tập trung (`router.py`):** `api_v1 = APIRouter(prefix="/api/v1")`; router nghiệp vụ include kèm `dependencies=[Depends(get_current_user)]`. Public: auth + streaming + snapshot_files. WS router include ở gốc (ngoài `/api/v1`).

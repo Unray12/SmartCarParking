@@ -19,6 +19,13 @@ class Settings(BaseSettings):
     jwt_secret: str = "CHANGE_ME_dev_secret_please_override_in_env"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 10080  # 7 ngày
+    # Token RIÊNG, ngắn hạn, CHỈ dùng cho 1 file snapshot cụ thể (gắn sẵn vào image_url do
+    # backend trả về) - khác JWT đăng nhập (7 ngày, toàn quyền API). Ảnh <img src> phải mang
+    # token qua query string (browser không tự gắn header) - nếu dùng thẳng JWT đăng nhập ở
+    # đó, URL ảnh lộ ra (log truy cập, lịch sử trình duyệt, chia sẻ màn hình...) là lộ luôn
+    # token toàn quyền 7 ngày. Token snapshot hết hạn nhanh + chỉ mở đúng 1 path nên lộ ra
+    # cũng không đoán/dùng được cho ảnh khác hay endpoint khác.
+    snapshot_token_ttl_seconds: int = 600  # 10 phút
     rfid_link_window_seconds: int = 30
     cors_origins: str = "*"
     plate_recognizer: str = ""

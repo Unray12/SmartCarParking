@@ -262,9 +262,7 @@ class RfidReaderManager:
             print("[RFID MANAGER] Disabled by config (RFID_USB_ENABLED=false)")
             return
         with self._db_session_factory() as db:
-            lots: list["ParkingLot"] = list(
-                db.scalars(select(_parking_lot_model()).where(_parking_lot_model().is_active.is_(True))).all()
-            )
+            lots: list["ParkingLot"] = list(db.scalars(select(_parking_lot_model())).all())
         for lot in lots:
             port = (lot.rfid_usb_port or "").strip()
             if port:
@@ -285,7 +283,7 @@ class RfidReaderManager:
             return
         self._stop_lot_reader(lot.id)
         port = (lot.rfid_usb_port or "").strip()
-        if lot.is_active and port:
+        if port:
             self._start_lot_reader(lot.id, port)
         self._refresh_default_reader()
 

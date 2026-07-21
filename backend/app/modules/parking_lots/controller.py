@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import get_settings
 from app.database.session import get_db
 from app.dependencies import get_rfid_reader_manager
-from app.modules.auth.dependencies import get_current_user_flexible
+from app.modules.auth.dependencies import get_snapshot_access
 from app.modules.parking_lots.schema import ParkingLotCreate, ParkingLotOut, ParkingLotOverviewOut, ParkingLotUpdate, SnapshotItemOut, LotCaptureStatusOut
 from app.modules.parking_lots.service import (
     create_parking_lot,
@@ -29,7 +29,8 @@ router = APIRouter(tags=["parking-lots"])
 
 # <img>/<a> trên browser KHÔNG gửi được header Authorization, nên router này không nằm
 # dưới dependencies=_auth ở router.py - nhưng vẫn bắt buộc token qua query string
-# (?token=) bằng get_current_user_flexible ở từng endpoint, KHÔNG để mở hoàn toàn.
+# (?token=) bằng get_snapshot_access ở từng endpoint (token snapshot riêng, khoá vào
+# đúng 1 file, KHÔNG để mở hoàn toàn và KHÔNG dùng JWT đăng nhập toàn quyền cho URL ảnh).
 files_router = APIRouter(tags=["snapshots"])
 
 
@@ -64,10 +65,14 @@ def update_parking_lot_endpoint(
 @router.delete("/parking-lots/{lot_id}")
 def delete_parking_lot_endpoint(
     lot_id: int,
+    force: bool = False,
     db: Session = Depends(get_db),
     rfid_reader_manager: RfidReaderManager = Depends(get_rfid_reader_manager),
 ) -> dict[str, bool]:
-    ok = delete_parking_lot(db, lot_id, rfid_reader_manager)
+    # force=False (mặc định): còn phiên gửi xe thật -> 409 kèm số liệu, để FE hỏi lại người
+    # dùng bằng popup xác nhận. force=True: người dùng đã xác nhận ở popup đó -> xóa bãi,
+    # GIỮ LẠI log (session/rfid event chỉ bị ngắt lot_id về NULL, không xóa dữ liệu).
+    ok = delete_parking_lot(db, lot_id, rfid_reader_manager, force=force)
     if not ok:
         raise HTTPException(status_code=404, detail="Parking lot not found")
     return {"ok": True}
@@ -98,7 +103,7 @@ def parking_lot_capture_status_endpoint(lot_id: int, db: Session = Depends(get_d
 
 
 @files_router.get("/snapshots/files/{folder}/{filename}", include_in_schema=False)
-def snapshot_file_endpoint(folder: str, filename: str, _user: str = Depends(get_current_user_flexible)) -> FileResponse:
+def snapshot_file_endpoint(folder: str, filename: str, _access: None = Depends(get_snapshot_access)) -> FileResponse:
     settings = get_settings()
     root = (Path(__file__).resolve().parents[3] / settings.snapshot_store_dir).resolve()
     candidate = (root / folder / filename).resolve()

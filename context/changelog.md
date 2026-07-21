@@ -2,6 +2,37 @@
 
 > Mới nhất ở trên. Đánh giá clean-code & nguyên tắc mở rộng gần đây nằm ở cuối mỗi entry.
 
+### 2026-07-21 — Fix regression: tối ưu ANPR đợt 1 làm giảm độ nhạy nhận diện
+**Người dùng báo:** sau khi tối ưu ANPR (entry ngay dưới), AI Center "kém nhạy, khó phát
+hiện được biển số và nhận diện các ký tự so với trước". Rà lại bằng A/B test tự động (chạy
+CẢ pipeline CŨ và MỚI trên cùng bộ ảnh snapshot thật, so kết quả từng ảnh) - không tìm được
+khác biệt trên 10 ảnh mẫu sẵn có (mọi biển thật giữ nguyên y hệt), nhưng rà lại code tìm ra
+**2 thay đổi có rủi ro thật dù chưa lộ trên bộ ảnh mẫu** (bộ mẫu chỉ có vài ảnh, không đại
+diện hết setup camera/khoảng cách thực tế của người dùng):
+
+1. **`plate_min_box_width`/`plate_min_box_height` (lọc box theo pixel trước OCR)** - đã
+   verify lại: chỉ riêng `plate_detector_max_boxes` (chọn top-N theo confidence) ĐÃ ĐỦ loại
+   2 box rác tìm thấy ở đợt 1 mà không cần lọc kích thước (test: tắt lọc size, giữ top-2 →
+   ra kết quả giống hệt). Lọc cứng theo pixel là rủi ro THỪA, không cần cho fix gốc, nhưng
+   có thể loại bỏ biển THẬT nếu camera của người dùng chụp biển nhỏ hơn ngưỡng (xa hơn/độ
+   phân giải khác bộ ảnh mẫu) → **bỏ hẳn 2 setting này**, chỉ giữ lọc theo confidence.
+2. **OCR "dừng sớm khi đủ ký tự" (`_GOOD_ENOUGH_CHAR_COUNT=6`)** - biển VN thật dài 7-9 ký
+   tự, ngưỡng "đủ" (6) THẤP HƠN độ dài biển thật → có thể dừng ở candidate đọc THIẾU 1-2 ký
+   tự trong khi candidate còn lại (raw hoặc deskewed) đọc được ĐỦ - **giảm độ chính xác đọc
+   ký tự đúng như báo cáo**. Lợi ích tốc độ của tối ưu này cũng chưa từng đo được rõ ràng
+   (ảnh benchmark thật tình cờ có `angle=0`, không kích hoạt nhánh dừng sớm) → **bỏ hẳn**,
+   `_read_plate_text` quay lại luôn thử ĐỦ CẢ 2 candidate như code gốc (chỉ giữ refactor
+   `_ocr_candidate` cho gọn code, không đổi hành vi).
+
+**Còn giữ (đã verify không phải nguyên nhân, vẫn cần cho fix gốc):** top-N box theo
+confidence (`plate_detector_max_boxes=2`) + lọc chuỗi rác ≥6 số liên tiếp sau OCR - cả 2 đã
+verify lại bằng A/B test, không đụng tới độ nhạy phát hiện biển thật.
+
+**Bài học:** 1 optimization "verify bằng benchmark" vẫn có thể regression nếu bộ dữ liệu
+benchmark không đại diện đủ điều kiện thực tế (bộ ảnh mẫu chỉ 10 ảnh, ít loại camera/khoảng
+cách) - khi người dùng báo hồi quy, ưu tiên bỏ phần rủi ro cao/lợi ích chưa rõ ràng trước,
+giữ lại phần đã verify chắc chắn.
+
 ### 2026-07-21 — Tối ưu ANPR: nhanh hơn + chính xác hơn (benchmark trên ảnh/model thật)
 **Đo bằng ảnh snapshot THẬT + model ONNX thật đang dùng (không giả lập)** trước khi sửa,
 theo đúng nguyên tắc "profile trước khi optimize" của skill CV: 1 frame thực tế (ảnh

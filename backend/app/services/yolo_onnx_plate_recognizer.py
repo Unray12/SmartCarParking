@@ -199,8 +199,6 @@ class YoloOnnxPlateRecognizer:
         self._iou = 0.45
         # Xem comment ở core/config.py:Settings.plate_detector_max_boxes.
         self._max_boxes = max(1, settings.plate_detector_max_boxes)
-        self._min_box_w = max(0, settings.plate_min_box_width)
-        self._min_box_h = max(0, settings.plate_min_box_height)
 
     @staticmethod
     def _read_names(session: "ort.InferenceSession") -> dict[int, str]:
@@ -220,10 +218,6 @@ class YoloOnnxPlateRecognizer:
             scaled = _scale_boxes(box.reshape(1, 4), ratio, pad, img_bgr.shape[:2])[0]
             results.append((scaled, conf, cls))
         return results
-
-    # Biển VN luôn 7-9 ký tự - đọc được >= ngưỡng này thì coi là ĐỦ TỐT, không cần thử thêm
-    # candidate thứ 2 (đỡ 1 lượt inference OCR đầy đủ, ~bằng chi phí của cả lượt đầu).
-    _GOOD_ENOUGH_CHAR_COUNT = 6
 
     def _ocr_candidate(self, candidate: np.ndarray) -> tuple[str, float, int]:
         """Chạy OCR trên 1 candidate, trả (text, avg_conf, char_count). char_count=0 nếu
@@ -251,20 +245,21 @@ class YoloOnnxPlateRecognizer:
         return _assemble_plate_text(chars), sum(confs) / len(confs), len(chars)
 
     def _read_plate_text(self, plate_crop: np.ndarray) -> tuple[str, float]:
-        # Thử candidate "khả năng cao hơn" TRƯỚC (deskewed nếu biển lệch rõ, raw nếu không) -
-        # chỉ chạy thêm candidate còn lại khi kết quả đầu CHƯA đủ tốt (ít ký tự). Trước đây
-        # chạy CẢ 2 candidate vô điều kiện mỗi khi có góc lệch - tốn gấp đôi 1 lượt inference
-        # OCR (~200ms/lượt, đã tự đo) dù phần lớn trường hợp candidate đầu đã đủ tốt.
+        # Luôn thử ĐỦ CẢ 2 candidate (raw + deskewed nếu có góc lệch) rồi chọn kết quả đọc
+        # được NHIỀU ký tự hơn - đã thử dừng sớm khi 1 candidate đọc được "đủ" ký tự để tiết
+        # kiệm 1 lượt OCR, nhưng ngưỡng "đủ" luôn thấp hơn độ dài biển thật (7-9 ký tự) nên có
+        # thể dừng ở kết quả THIẾU 1-2 ký tự trong khi candidate còn lại đọc được ĐỦ - giảm độ
+        # chính xác đọc ký tự, bỏ lại tối ưu này (xem changelog.md).
+        candidates = [plate_crop]
         deskewed = _deskew(plate_crop)
-        candidates = [deskewed, plate_crop] if deskewed is not None else [plate_crop]
+        if deskewed is not None:
+            candidates.append(deskewed)
 
         best_text, best_conf, best_count = "", 0.0, 0
         for candidate in candidates:
             text, avg_conf, count = self._ocr_candidate(candidate)
             if count > best_count or (count == best_count and avg_conf > best_conf):
                 best_text, best_conf, best_count = text, avg_conf, count
-            if best_count >= self._GOOD_ENOUGH_CHAR_COUNT:
-                break
 
         return best_text, best_conf
 
@@ -280,19 +275,14 @@ class YoloOnnxPlateRecognizer:
         except Exception:
             return []
 
-        # Camera cổng vào/ra chỉ chụp ĐÚNG 1 xe/lượt (1 camera = 1 làn) - chỉ OCR N box tự
-        # tin nhất, bỏ hẳn box quá nhỏ để không thể chứa ký tự đọc được. Xem
-        # core/config.py:Settings.plate_detector_max_boxes - vừa nhanh hơn (bớt lượt OCR
-        # thừa trên box nhiễu) vừa chính xác hơn (bớt nguồn sinh biển rác cạnh tranh
-        # confidence với biển thật ở rfid/service.py:_detect_plate_via_ai).
-        candidates = []
-        for box, det_conf, cls in plate_boxes:
-            x1, y1, x2, y2 = (int(v) for v in box)
-            if x2 - x1 < self._min_box_w or y2 - y1 < self._min_box_h:
-                continue
-            candidates.append((box, det_conf, cls))
-        candidates.sort(key=lambda item: item[1], reverse=True)
-        candidates = candidates[: self._max_boxes]
+        # Camera cổng vào/ra chỉ chụp ĐÚNG 1 xe/lượt (1 camera = 1 làn) - chỉ OCR N box TỰ
+        # TIN NHẤT theo det_conf. Xem core/config.py:Settings.plate_detector_max_boxes - vừa
+        # nhanh hơn (bớt lượt OCR thừa trên box nhiễu) vừa chính xác hơn (bớt nguồn sinh biển
+        # rác cạnh tranh confidence với biển thật ở rfid/service.py:_detect_plate_via_ai).
+        # KHÔNG lọc theo kích thước box: biển ở xa/camera zoom rộng có thể hợp lệ dù nhỏ -
+        # lọc cứng theo pixel dễ bỏ sót biển thật tuỳ setup camera (đã thử: chỉ riêng lọc
+        # theo confidence, không cần lọc kích thước, đã đủ loại bỏ box rác trong test thật).
+        candidates = sorted(plate_boxes, key=lambda item: item[1], reverse=True)[: self._max_boxes]
 
         results: list[PlateDetection] = []
         seen: set[str] = set()

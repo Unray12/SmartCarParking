@@ -63,10 +63,10 @@ Shutdown: dừng RFID reader + `camera_manager.shutdown()`.
 - `PlateRecognizer` — Protocol: `detect(frame_bgr) -> list[PlateDetection]`.
 - `normalize_plate(raw)` — uppercase + bỏ ký tự không phải `[A-Z0-9]`.
 - `load_plate_recognizer(spec)`: `module:Class` import động → PaddleOCR → Dummy (fallback).
-- **`YoloOnnxPlateRecognizer`** (mặc định, `.env`): YOLOv5 ONNX 2 giai đoạn — detect vùng biển → deskew (Hough) → detect TỪNG KÝ TỰ (30 class) → tự nhận 1 dòng/2 dòng → ghép qua `normalize_plate`. Output ONNX raw KHÔNG có NMS → tự decode + NMS numpy. Model ở `AI_MODELS_DIR` (`LP_detector.onnx` + `LP_ocr.onnx`). Xem [changelog.md](changelog.md) 2026-07-14 ANPR, 2026-07-21 tối ưu.
-  - **Lọc box trước khi OCR** (`plate_detector_max_boxes`=2, `plate_min_box_width`/`plate_min_box_height`): 1 camera = 1 làn xe nên chỉ OCR N box tự tin nhất, bỏ box quá nhỏ (không thể chứa ký tự đọc được) — vừa nhanh (bớt lượt OCR thừa trên box nhiễu) vừa an toàn (bớt nguồn sinh biển rác).
+- **`YoloOnnxPlateRecognizer`** (mặc định, `.env`): YOLOv5 ONNX 2 giai đoạn — detect vùng biển → deskew (Hough) → detect TỪNG KÝ TỰ (30 class) → tự nhận 1 dòng/2 dòng → ghép qua `normalize_plate`. Output ONNX raw KHÔNG có NMS → tự decode + NMS numpy. Model ở `AI_MODELS_DIR` (`LP_detector.onnx` + `LP_ocr.onnx`). Xem [changelog.md](changelog.md) 2026-07-14 ANPR, 2026-07-21 tối ưu (2 lượt, xem đợt 2 sửa lại đợt 1 gây giảm độ nhạy).
+  - **Chỉ OCR top-N box theo confidence** (`plate_detector_max_boxes`=2): 1 camera = 1 làn xe, chỉ OCR N box tự tin nhất theo det_conf — KHÔNG lọc theo kích thước pixel (đã thử rồi bỏ: biển ở xa/camera zoom rộng hợp lệ dù nhỏ, lọc cứng theo pixel làm bỏ sót biển thật tùy setup camera).
   - **Lọc chuỗi rác sau OCR**: bỏ chuỗi có ≥6 số liên tiếp (biển VN thật không có) — chặn các lần OCR đọc nhầm 1 box không-phải-biển ra chuỗi dài toàn số.
-  - **OCR candidate thử LẦN LƯỢT** (deskewed trước nếu có lệch, raw nếu không) thay vì luôn chạy CẢ 2 vô điều kiện — dừng ngay khi candidate đầu đã đọc được ≥6 ký tự (đủ tốt), không tốn thêm 1 lượt inference OCR đầy đủ nếu không cần.
+  - `_read_plate_text` luôn thử ĐỦ CẢ 2 candidate (raw + deskewed) như code gốc — đã thử tối ưu "dừng sớm khi đủ ký tự" rồi bỏ: ngưỡng "đủ" luôn thấp hơn độ dài biển thật (7-9 ký tự) nên có thể dừng sớm ở kết quả thiếu ký tự.
 
 ## 9. Các module API (dưới `/api/v1`, đều cần JWT trừ ghi chú)
 

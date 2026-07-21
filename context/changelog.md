@@ -2,6 +2,38 @@
 
 > Mới nhất ở trên. Đánh giá clean-code & nguyên tắc mở rộng gần đây nằm ở cuối mỗi entry.
 
+### 2026-07-21 — Bảo mật: token JWT toàn quyền lộ qua URL ảnh snapshot
+**Vấn đề (rà soát bảo mật lần 2):** `<img src>` không gắn được header nên URL ảnh snapshot
+phải mang token qua query `?token=`. Trước đây FE tự đính THẲNG JWT đăng nhập (toàn quyền
+API, hạn 7 ngày) vào URL đó (`get_current_user_flexible` chấp nhận bất kỳ JWT hợp lệ qua
+query). URL ảnh dễ lộ hơn 1 header (log truy cập server, lịch sử trình duyệt, chia sẻ màn
+hình) — lộ 1 URL ảnh = lộ luôn token toàn quyền tài khoản 7 ngày, không chỉ lộ đúng tấm ảnh
+đó. Đây cũng là điều làm việc "đoán tên file ảnh" nguy hiểm: ai cầm được 1 token qua đường
+này coi như cầm chìa khoá gọi mọi API, không chỉ xem ảnh.
+
+**Fix:** Thêm token RIÊNG cho snapshot (`create_snapshot_token`, `security.py`) — JWT không
+có claim `sub` (không dùng được như JWT đăng nhập ở các endpoint khác) mà có `scope=snapshot`
++ `path` khoá cứng vào đúng `{folder}/{filename}`, hạn ngắn (`SNAPSHOT_TOKEN_TTL_SECONDS`,
+mặc định 600s). Backend tự nhúng token này vào `image_url`/`*_snapshot_url` ngay lúc build
+(`resolve_snapshot_path_to_url`, `logs/service.py:_to_snapshot_url`) — FE không tự đính JWT
+đăng nhập lên URL ảnh nữa (`ui.js:withToken` bỏ qua nếu URL đã có `token=`). Endpoint
+`get_current_user_flexible` xoá (không còn nơi gọi) — thay bằng `get_snapshot_access`: chấp
+nhận header Bearer JWT thường (Postman/API trực tiếp) HOẶC query token snapshot khớp CHÍNH
+XÁC path đang xin; JWT đăng nhập nhét vào query bị từ chối (đóng đúng lỗ hổng cũ).
+
+**Verify:** unit test trực tiếp `get_snapshot_access` (không cần DB) — token đúng path → qua;
+cùng token, đổi filename (mô phỏng kẻ có URL lộ đi đoán ảnh khác) → 401; thiếu token → 401;
+token hết hạn (chờ qua TTL) → 401; JWT đăng nhập qua header → vẫn qua (không vỡ Postman); JWT
+đăng nhập nhét qua query (hành vi cũ) → 401 (xác nhận lỗ hổng đã đóng).
+
+**Việc CHƯA làm (biết trước, chưa cần):** WebSocket `/ws/cameras/{id}` và WHEP MediaMTX
+(`buildWhepUrl`) cũng đính thẳng JWT đăng nhập qua query cho lý do tương tự (browser không
+gắn header được cho WS/POST cross-origin) — CHƯA áp dụng cùng kiểu token phạm vi hẹp vì cần
+mint token mới liên tục theo phiên xem live (phức tạp hơn ảnh tĩnh) và chưa verify được bằng
+browser thật trong lượt này; rủi ro thấp hơn ảnh (token WS/WHEP hết hạn theo JWT 7 ngày như
+nhau, nhưng WS phải đang mở kết nối mới dùng được, không tự "xem lại" như ảnh) — cân nhắc áp
+dụng cùng pattern nếu cần siết thêm.
+
 ### 2026-07-19 — Stream hybrid WebRTC + JPEG, on-demand, refactor DRY, pin MediaMTX
 **Kiến trúc stream (xem [streaming-architecture.md](streaming-architecture.md)):**
 - Thêm **MediaMTX** (service Docker) làm media server: camera `rtsp://` → WebRTC (WHEP) tới browser, không re-encode. Camera HTTP/MJPEG giữ đường JPEG-over-WS. FE tự chọn qua `GET /cameras/{id}/webrtc`.

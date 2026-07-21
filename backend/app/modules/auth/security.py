@@ -27,3 +27,18 @@ def decode_token(token: str) -> dict | None:
         return jwt.decode(token, settings.jwt_secret, algorithms=[settings.jwt_algorithm])
     except Exception:
         return None
+
+
+def create_snapshot_token(path: str, ttl_seconds: int) -> str:
+    """Token ngắn hạn CHỈ mở được đúng 1 file snapshot (claim "path"), không có "sub" nên
+    không dùng được như JWT đăng nhập (get_current_user đòi "sub"). Dùng để nhúng sẵn vào
+    image_url trả về từ API, thay cho việc gắn thẳng JWT đăng nhập lên URL ảnh - xem
+    get_snapshot_access (auth/dependencies.py) và Settings.snapshot_token_ttl_seconds."""
+    now = datetime.now(timezone.utc)
+    payload = {
+        "scope": "snapshot",
+        "path": path,
+        "iat": now,
+        "exp": now + timedelta(seconds=ttl_seconds),
+    }
+    return jwt.encode(payload, settings.jwt_secret, algorithm=settings.jwt_algorithm)

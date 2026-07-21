@@ -9,6 +9,8 @@ from sqlalchemy import func, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from app.core.config import get_settings
+from app.modules.auth.security import create_snapshot_token
 from app.modules.parking_lots.model import ParkingLot
 from app.modules.parking_lots.schema import ParkingLotCreate, ParkingLotUpdate, SnapshotItemOut, ParkingSessionBriefOut, ParkingLotOverviewOut, ParkingLotOut, RejectedRfidEventOut, LotCaptureStatusOut
 from app.modules.rfid.model import RfidEvent
@@ -145,7 +147,10 @@ def resolve_snapshot_path_to_url(absolute_or_relative_path: str) -> str:
     p = Path(absolute_or_relative_path)
     filename = p.name
     parent = p.parent.name
-    return f"/api/v1/snapshots/files/{parent}/{filename}"
+    # Token nhúng sẵn ở đây (khoá cứng vào đúng path này, ngắn hạn) thay vì để frontend tự
+    # gắn JWT đăng nhập lên URL ảnh - xem get_snapshot_access + Settings.snapshot_token_ttl_seconds.
+    token = create_snapshot_token(f"{parent}/{filename}", get_settings().snapshot_token_ttl_seconds)
+    return f"/api/v1/snapshots/files/{parent}/{filename}?token={token}"
 
 
 def _session_entry_snapshot_item(s: ParkingSession) -> SnapshotItemOut | None:

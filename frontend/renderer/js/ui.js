@@ -100,9 +100,15 @@ export function fmtDuration(minutes) {
   return rem ? `${h}h${String(rem).padStart(2, '0')}` : `${h}h`;
 }
 
-// Ảnh snapshot giờ yêu cầu token (backend đã bỏ endpoint public hoàn toàn) - <img src>
-// không tự gắn được header Authorization nên phải đính token qua query string ?token=.
+// Ảnh snapshot: image_url do backend trả về đã tự mang theo token snapshot riêng (khoá
+// cứng vào đúng file đó, ngắn hạn - xem parking_lots/service.py:resolve_snapshot_path_to_url).
+// KHÔNG được đè thêm token đăng nhập (JWT toàn quyền 7 ngày) lên URL ảnh ở đây - <img src>
+// hiện trong DOM/lịch sử trình duyệt/log truy cập, lộ JWT toàn quyền qua đó nguy hiểm hơn
+// nhiều so với lộ 1 token chỉ mở được đúng ảnh đó trong vài phút. Chỉ tự gắn token đăng
+// nhập cho URL nào CHƯA có sẵn token (fallback, phòng trường hợp gọi absoluteApiUrl cho
+// path khác không tự mang token).
 function withToken(url) {
+  if (url.includes('token=')) return url;
   const token = getToken();
   if (!token) return url;
   const sep = url.includes('?') ? '&' : '?';

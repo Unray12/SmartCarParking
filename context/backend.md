@@ -74,6 +74,6 @@ Shutdown: dừng RFID reader + `camera_manager.shutdown()`.
 - **sessions**: `GET /sessions?active_only&limit` — `compute_fee`/`compute_duration_minutes`; phí/thời gian CHỐT lúc check-out; map `__NONE__`→null.
 - **dashboard**: `GET /dashboard/summary` (camera/session/vào-ra/capacity/occupancy/revenue), `GET /dashboard/stats?days=N` (daily/by_hour/avg_duration/revenue).
 - **logs**: `GET /logs?limit&hours` — gom RfidEvent + PlateRead + ParkingSession → `LogEntry`, kèm `*_snapshot_url`.
-- **parking_lots**: CRUD `/parking-lots` (tên unique, capacity, occupancy), `GET /snapshots`, `GET /{id}/overview`, `GET /{id}/capture-status` (nhẹ, cho poll chip realtime), `GET /snapshots/files/{folder}/{filename}` (public, chặn path traversal). ⚠️ `delete_parking_lot` bắt `IntegrityError` → 409 (không cho xóa bãi còn lịch sử phiên).
+- **parking_lots**: CRUD `/parking-lots` (tên unique, capacity, occupancy), `GET /snapshots`, `GET /{id}/overview`, `GET /{id}/capture-status` (nhẹ, cho poll chip realtime), `GET /snapshots/files/{folder}/{filename}` (chặn path traversal + `get_snapshot_access`: header Bearer JWT thường HOẶC token snapshot riêng khoá theo đúng path, hạn ngắn — KHÔNG public, xem mục 0.5/12 overview.md). ⚠️ `delete_parking_lot` bắt `IntegrityError` → 409 (không cho xóa bãi còn lịch sử phiên).
 
 > **Bảo vệ tập trung (`router.py`):** `api_v1 = APIRouter(prefix="/api/v1")`; router nghiệp vụ include kèm `dependencies=[Depends(get_current_user)]`. Public: auth + streaming + snapshot_files. WS router include ở gốc (ngoài `/api/v1`).

@@ -2,6 +2,40 @@
 
 > Mới nhất ở trên. Đánh giá clean-code & nguyên tắc mở rộng gần đây nằm ở cuối mỗi entry.
 
+### 2026-07-21 — Fix bug NGHIÊM TRỌNG: filter "chuỗi rác" tự thêm chặn nhầm biển máy hợp lệ
+**Bối cảnh:** người dùng đưa link repo tham khảo (`trungdinh22/License-Plate-Recognition`,
+cùng gốc thuật toán với `Marsmallotr/License-Plate-Recognition` đã port) để đối chiếu tìm
+cách tối ưu detect biển. Clone về so sánh trực tiếp với code hiện tại bằng ảnh thật.
+
+**Phát hiện phụ (đối chiếu `function/utils_rotate.py`):** repo tham khảo ước lượng góc lệch
+bằng cách CHỌN 1 Hough line duy nhất (topmost), khác với cách của mình (lấy trung bình mọi
+line). Đã tự implement + test cả 2 cách trên toàn bộ ảnh thật hiện có: cách của HỌ ra góc ẢO
+(-90°, 82°, 83°) trên nhiều ảnh - KHÔNG ổn định bằng cách lấy trung bình đang dùng. Quyết
+định: KHÔNG đổi phần này (test trước khi copy, không tin theo repo tham khảo mù quáng).
+
+**Phát hiện CHÍNH - bug nghiêm trọng tự gây ra ở đợt tối ưu 2026-07-21 trước (mục "1 camera
+= 1 làn, giảm biển rác"):** filter `_GARBAGE_DIGIT_RUN = re.compile(r"\d{6,}")` (bỏ chuỗi có
+≥6 số liên tiếp, cho là "biển VN thật không bao giờ có") **SAI HOÀN TOÀN**. Format biển máy
+cực phổ biến "2 số + 1 chữ + 1 số + 5 số" (vd "29Y3-03658", "64K1-32319", "29X5-55555",
+"59N3-34388" - đều là biển THẬT xác nhận đúng trong ảnh test) chuẩn hoá thành chuỗi có ĐÚNG
+6 số liên tiếp ngay sau chữ cái duy nhất → **bị filter này chặn nhầm hàng loạt**, biến kết
+quả đọc ĐÚNG thành rỗng. Đây là nguyên nhân CHÍNH khiến người dùng thấy "độ nhạy giảm so với
+ban đầu" - không liên quan gì tới deskew/CLAHE (đợt fix trước đã đúng hướng nhưng bị lỗi này
+che khuất mất tác dụng suốt từ lúc thêm vào).
+
+**Cách phát hiện:** verify đầy đủ 50 ảnh test qua `detect()` (bước cuối, KHÔNG bypass qua
+`_read_plate_text` như các lần verify trước) - lần đầu tiên chạy full pipeline này lộ ra:
+biển đọc ĐÚNG ở `_read_plate_text` (vd "29Y303658" conf 0.94) nhưng `detect()` vẫn trả `[]`.
+Bài học: verify từng hàm riêng lẻ không thay được verify TOÀN BỘ pipeline thật.
+
+**Fix:** bỏ hẳn `_GARBAGE_DIGIT_RUN`. Lớp bảo vệ chống biển rác giờ chỉ còn top-N box theo
+confidence (đã verify độc lập là đủ cho 2 ca rác gốc tìm thấy tuần trước) + ngưỡng độ dài tối
+thiểu nâng lên 7 ký tự (đối chiếu repo tham khảo, chặn kết quả THIẾU ký tự như "9A0"/"09"/"0").
+
+**Verify (50 ảnh thật: 10 benchmark cũ + 40 ảnh 2026-07-21):** trước fix ~15-20 ảnh bị chặn
+nhầm thành rỗng dù đọc đúng; sau fix **42/50 đọc đúng**, 8 ảnh còn lại là mờ/quá nhỏ thật (đã
+verify bằng mắt, không phải bug). 0 trường hợp biển rác nào tái xuất hiện.
+
 ### 2026-07-21 — Fix nguyên nhân GỐC của phần lớn lượt quẹt AI bị "NONE"
 **Người dùng báo:** capture ảnh rồi nhận diện biển số vẫn kém, ảnh nghiêng lệch chưa nhạy -
 cung cấp 35 ảnh test thật (`snapshots_store/20260721/`, webcam chụp lại ảnh biển số hiển thị

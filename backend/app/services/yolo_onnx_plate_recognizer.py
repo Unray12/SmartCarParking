@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import re
 from pathlib import Path
 
 import cv2
@@ -305,12 +304,6 @@ class YoloOnnxPlateRecognizer:
 
         return best_text, best_conf
 
-    # Biển VN thật KHÔNG BAO GIỜ có 6+ chữ số liên tiếp (tối đa 5 số trong cụm số cuối) -
-    # chuỗi rác do OCR đọc nhầm 1 box không-phải-biển thường dài bất thường và toàn số (đã
-    # tự đo: "59G163188", "59U116124" - 6-7 số liên tiếp). Lọc thẳng, không rủi ro chặn
-    # nhầm biển thật vì không format biển VN nào rơi vào trường hợp này.
-    _GARBAGE_DIGIT_RUN = re.compile(r"\d{6,}")
-
     def detect(self, frame_bgr: np.ndarray) -> list[PlateDetection]:
         try:
             plate_boxes = self._run(self._det_session, frame_bgr, self._det_conf)
@@ -342,11 +335,21 @@ class YoloOnnxPlateRecognizer:
                 continue
 
             plate = normalize_plate(text)
-            if not plate or len(plate) < 4 or len(plate) > 12:
+            # Biển VN thật luôn >= 7 ký tự (_MIN_PLAUSIBLE_CHARS, cùng ngưỡng dùng để quyết
+            # định có thử candidate tăng cường hay không - xem _read_plate_text). Trước đây
+            # ngưỡng dưới ở đây là 4 - quá lỏng, để lọt qua các lần đọc THIẾU ký tự (crop mờ/
+            # tương phản kém) như "9A0" (3), "09" (2), "0" (1) làm biển giả gán nhầm cho xe
+            # thật - đối chiếu repo tham khảo (License-Plate-Recognition/function/helper.py)
+            # cũng hard-reject dưới 7 box ký tự, xác nhận đây là ngưỡng hợp lý cho biển VN.
+            #
+            # ĐÃ BỎ (2026-07-21, xem changelog.md): filter "chuỗi rác >= 6 số liên tiếp" -
+            # SAI, vì format biển máy 2 số + 1 chữ + 1 số + 5 số (vd "29Y3-03658" chuẩn hoá
+            # "29Y303658") có ĐÚNG 6 số liên tiếp ngay sau chữ cái - filter đó chặn nhầm PHẦN
+            # LỚN biển máy hợp lệ. Bảo vệ khỏi biển rác giờ chỉ còn dựa vào top-N box theo
+            # confidence ở trên - đã verify riêng bước đó đủ loại box rác mà không cần thêm gì.
+            if not plate or len(plate) < self._MIN_PLAUSIBLE_CHARS or len(plate) > 12:
                 continue
             if not any(c.isdigit() for c in plate[:2]):
-                continue
-            if self._GARBAGE_DIGIT_RUN.search(plate):
                 continue
             if plate in seen:
                 continue

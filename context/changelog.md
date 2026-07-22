@@ -2,6 +2,98 @@
 
 > Mới nhất ở trên. Đánh giá clean-code & nguyên tắc mở rộng gần đây nằm ở cuối mỗi entry.
 
+### 2026-07-21 — Fix bug NGHIÊM TRỌNG: filter "chuỗi rác" tự thêm chặn nhầm biển máy hợp lệ
+**Bối cảnh:** người dùng đưa link repo tham khảo (`trungdinh22/License-Plate-Recognition`,
+cùng gốc thuật toán với `Marsmallotr/License-Plate-Recognition` đã port) để đối chiếu tìm
+cách tối ưu detect biển. Clone về so sánh trực tiếp với code hiện tại bằng ảnh thật.
+
+**Phát hiện phụ (đối chiếu `function/utils_rotate.py`):** repo tham khảo ước lượng góc lệch
+bằng cách CHỌN 1 Hough line duy nhất (topmost), khác với cách của mình (lấy trung bình mọi
+line). Đã tự implement + test cả 2 cách trên toàn bộ ảnh thật hiện có: cách của HỌ ra góc ẢO
+(-90°, 82°, 83°) trên nhiều ảnh - KHÔNG ổn định bằng cách lấy trung bình đang dùng. Quyết
+định: KHÔNG đổi phần này (test trước khi copy, không tin theo repo tham khảo mù quáng).
+
+**Phát hiện CHÍNH - bug nghiêm trọng tự gây ra ở đợt tối ưu 2026-07-21 trước (mục "1 camera
+= 1 làn, giảm biển rác"):** filter `_GARBAGE_DIGIT_RUN = re.compile(r"\d{6,}")` (bỏ chuỗi có
+≥6 số liên tiếp, cho là "biển VN thật không bao giờ có") **SAI HOÀN TOÀN**. Format biển máy
+cực phổ biến "2 số + 1 chữ + 1 số + 5 số" (vd "29Y3-03658", "64K1-32319", "29X5-55555",
+"59N3-34388" - đều là biển THẬT xác nhận đúng trong ảnh test) chuẩn hoá thành chuỗi có ĐÚNG
+6 số liên tiếp ngay sau chữ cái duy nhất → **bị filter này chặn nhầm hàng loạt**, biến kết
+quả đọc ĐÚNG thành rỗng. Đây là nguyên nhân CHÍNH khiến người dùng thấy "độ nhạy giảm so với
+ban đầu" - không liên quan gì tới deskew/CLAHE (đợt fix trước đã đúng hướng nhưng bị lỗi này
+che khuất mất tác dụng suốt từ lúc thêm vào).
+
+**Cách phát hiện:** verify đầy đủ 50 ảnh test qua `detect()` (bước cuối, KHÔNG bypass qua
+`_read_plate_text` như các lần verify trước) - lần đầu tiên chạy full pipeline này lộ ra:
+biển đọc ĐÚNG ở `_read_plate_text` (vd "29Y303658" conf 0.94) nhưng `detect()` vẫn trả `[]`.
+Bài học: verify từng hàm riêng lẻ không thay được verify TOÀN BỘ pipeline thật.
+
+**Fix:** bỏ hẳn `_GARBAGE_DIGIT_RUN`. Lớp bảo vệ chống biển rác giờ chỉ còn top-N box theo
+confidence (đã verify độc lập là đủ cho 2 ca rác gốc tìm thấy tuần trước) + ngưỡng độ dài tối
+thiểu nâng lên 7 ký tự (đối chiếu repo tham khảo, chặn kết quả THIẾU ký tự như "9A0"/"09"/"0").
+
+**Verify (50 ảnh thật: 10 benchmark cũ + 40 ảnh 2026-07-21):** trước fix ~15-20 ảnh bị chặn
+nhầm thành rỗng dù đọc đúng; sau fix **42/50 đọc đúng**, 8 ảnh còn lại là mờ/quá nhỏ thật (đã
+verify bằng mắt, không phải bug). 0 trường hợp biển rác nào tái xuất hiện.
+
+### 2026-07-21 — Fix nguyên nhân GỐC của phần lớn lượt quẹt AI bị "NONE"
+**Người dùng báo:** capture ảnh rồi nhận diện biển số vẫn kém, ảnh nghiêng lệch chưa nhạy -
+cung cấp 35 ảnh test thật (`snapshots_store/20260721/`, webcam chụp lại ảnh biển số hiển thị
+trên màn hình khác). Rà bằng cách chạy LẠI recognizer trên đúng các ảnh đã lưu.
+
+**Phát hiện quan trọng nhất (bất ngờ):** đa số ảnh có tên file `..._NONE_...` (lúc quẹt thẻ
+AI không đọc được biển) nhưng khi chạy LẠI y nguyên file ảnh đã lưu đó qua recognizer ngay
+lúc rà soát → đọc ĐÚNG với confidence 0.83-0.95, kể cả biển lệch tới **28°**. Tức là:
+**model/deskew hiện tại đã đủ tốt** - vấn đề không phải chất lượng nhận diện, mà là
+**`test_camera_ai()` (camera_stream.py) chỉ thử ĐÚNG 1 FRAME rồi bỏ cuộc ngay nếu frame đó
+không đọc được** (rung tay/xe đang di chuyển qua khung/camera đang refocus đúng khoảnh khắc
+quẹt thẻ) - cùng khung cảnh chụp lại vài trăm ms sau lại đọc được hoàn toàn bình thường.
+
+**Fix 1 (nguyên nhân gốc, tác động lớn nhất):** `test_camera_ai()` thử lại trên vài **frame
+MỚI** liên tiếp (`plate_detect_retry_attempts`=3, cách nhau `plate_detect_retry_interval_seconds`=0.3s)
+nếu frame đầu không ra kết quả, trước khi trả "không đọc được". Dừng ngay khi có kết quả -
+trường hợp phổ biến (frame đầu đã đọc được) không tốn thêm gì.
+
+**Fix 2 (xử lý ảnh, cho crop tương phản kém/thiếu sáng):** thêm `_enhance_for_ocr` - CLAHE
+(Contrast Limited Adaptive Histogram Equalization) trên kênh L (LAB) + upscale CUBIC nếu crop
+nhỏ - dùng làm candidate BỔ SUNG khi 2 candidate gốc (raw/deskewed) đọc được < 7 ký tự. **Chi
+tiết quan trọng phát hiện khi verify** (lần đầu code SAI, tự phát hiện qua A/B test trước khi
+báo xong): phải tính lại góc lệch và deskew TRÊN BẢN ĐÃ TĂNG CƯỜNG, không chỉ tăng cường rồi
+OCR thẳng - vì crop gốc tương phản kém khiến Hough (`_compute_skew_angle`) ước lượng SAI góc
+(ra 0° dù thực tế lệch ~12°), CLAHE làm rõ cạnh viền chữ mới giúp ước lượng đúng góc thật.
+
+**Đã KHÔNG cố fix (giới hạn phần cứng, không phải thuật toán, verify bằng ảnh thật):**
+- Crop quá nhỏ (ví dụ 51x26px) - không đủ pixel gốc để phục hồi ký tự dù dùng thuật toán
+  tăng cường nào (đã tự test CLAHE/sharpen/upscale, không giúp được crop cỡ này).
+- Ảnh mất nét hoàn toàn (out-of-focus thật, webcam đang refocus) - không có box nào ở
+  confidence 0.15 cũng không thấy - đúng hành vi mong đợi (ảnh hỏng phải trả "không đọc được"
+  chứ không nên tự chế ra kết quả), đây là lỗi vị trí/tiêu cự camera lúc chụp, không sửa được
+  bằng code phía sau.
+
+**Verify:** chạy lại toàn bộ 35 ảnh test + 10 ảnh benchmark cũ (2026-07-14/07-18) sau khi
+sửa - ca lỗi cụ thể được báo (biển "98AF00127" đọc sai thành "9A-0") nay đọc đúng; 0 ca đang
+đúng bị hỏng thêm (regression-free, so từng ảnh).
+
+### 2026-07-21 — Nút "Giả lập quét RFID" ở Parking Lots (test không cần đầu đọc thật)
+**Yêu cầu:** thêm 1 cờ bật/tắt (mặc định tắt) + nút nhỏ ở trang Parking Lots, bấm 1 lần =
+quẹt Vào, bấm lần 2 = quẹt Ra - test nhanh luồng RFID không cần cắm đầu đọc thật.
+
+**Đổi gì:**
+- `core/config.py`: `Settings.rfid_test_mode_enabled` (mặc định `False`, `.env`:
+  `RFID_TEST_MODE_ENABLED`). Expose qua `GET /health` (public, sẵn có) - FE đọc 1 lần lúc
+  `initParking()`, không cần route riêng.
+- FE `parking.js`: nút `#lotSimulateRfidBtn` trong panel "Chi tiết bãi xe" (ẩn hoàn toàn khi
+  cờ tắt). Dùng 1 thẻ cố định `WEBTEST0001` (không phải thẻ thật, dễ nhận ra trong lịch sử);
+  trạng thái Vào/Ra suy từ session list của bãi đang mở (`lotDetailState.testCardActive`),
+  KHÔNG dùng biến toggle client-side độc lập - tự đồng bộ đúng dù refresh trang. POST thẳng
+  `/api/v1/rfid-events` có sẵn, `source: "parking-lot-simulate-button"` để phân biệt trong
+  log. Sau mỗi lần bấm, gọi lại `openParkingLotDetail` để đồng bộ log/occupancy ngay.
+
+**Verify (Playwright thật, bật cờ tạm thời qua `.env` rồi tắt lại):** nút ẩn khi cờ tắt,
+hiện khi bật; bấm lần 1 → nhãn đổi "(Vào)"→"(Ra)", tạo session `status=in`; bấm lần 2 →
+nhãn đổi lại "(Vào)", session đóng `status=out` (entry/exit_time cách nhau ~1s đúng 2 lần
+bấm). Đã dọn dữ liệu test + trả cờ về `false`.
+
 ### 2026-07-21 — Fix regression: tối ưu ANPR đợt 1 làm giảm độ nhạy nhận diện
 **Người dùng báo:** sau khi tối ưu ANPR (entry ngay dưới), AI Center "kém nhạy, khó phát
 hiện được biển số và nhận diện các ký tự so với trước". Rà lại bằng A/B test tự động (chạy

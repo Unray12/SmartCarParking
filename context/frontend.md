@@ -37,6 +37,7 @@ Module import trực tiếp singleton chung (`els` từ `dom.js`, helper `ui.js`
 
 ## Parking (`views/parking.js`)
 - Chi tiết bãi: `openParkingLotDetail` render log in/out + ảnh capture; 2 stream vào/ra qua `createStreamSession`. Poll RIÊNG tần suất cao (`capture-status`, ~1s) cho chip RFID gần realtime, độc lập nhịp `/overview`. Chip RFID 3 trạng thái (ok/off/warn) + cảnh báo quẹt bị từ chối theo hướng (baseline chống pulse lại sự kiện cũ). Ô capture vào độc lập; ô ra chia đôi (đối chiếu vào/ra).
+- **Nút "Giả lập quét RFID"** (chi tiết bãi, chỉ hiện khi `Settings.rfid_test_mode_enabled=true` - đọc qua `GET /health`): test vào/ra không cần đầu đọc thật. Dùng 1 thẻ cố định `WEBTEST0001` cho toàn hệ thống; bấm lần 1 = quẹt Vào, lần 2 = quẹt Ra (nhãn nút tự đổi theo `testCardActive`, suy từ session list của bãi đang mở). Vì thẻ là CHUNG (không phân theo bãi), quẹt Vào ở 1 bãi trong khi thẻ đang "trong" 1 bãi khác sẽ bị backend từ chối `already_in` — đúng ý người dùng "mặc định chỉ 1 session vào/ra tại 1 thời điểm".
 
 ## AI (`views/ai.js`)
 - Upload model + test AI live: vòng poll tự-lên-lịch (`setTimeout`-sau-khi-xong, không `setInterval` — tránh chồng lấn trên NUC) gọi `/ai/test-camera`; vẽ frame + overlay box biển số lên canvas. (Đây là vòng JPEG riêng, chưa dùng `jpeg-stream.js` vì cần overlay per-frame.)

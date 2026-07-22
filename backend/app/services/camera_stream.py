@@ -537,14 +537,28 @@ class CameraStreamManager:
                 if frame_bgr is not None:
                     break
                 time.sleep(0.05)
+            if frame_bgr is None:
+                return False, [], None
+
+            # Thử lại trên vài frame MỚI liên tiếp nếu chưa đọc được biển - xem comment ở
+            # Settings.plate_detect_retry_attempts. Dừng ngay khi có kết quả -> trường hợp
+            # phổ biến (frame đầu đã đọc được) không tốn thêm gì.
+            settings = get_settings()
+            max_attempts = max(1, settings.plate_detect_retry_attempts)
+            retry_interval = max(0.0, settings.plate_detect_retry_interval_seconds)
+            last_frame = frame_bgr
+            for attempt in range(max_attempts):
+                detections = self._recognizer.detect(frame_bgr)
+                if detections:
+                    return True, detections, frame_bgr
+                last_frame = frame_bgr
+                if attempt < max_attempts - 1:
+                    time.sleep(retry_interval)
+                    fresh_frame = worker.latest_frame_bgr()
+                    frame_bgr = fresh_frame if fresh_frame is not None else frame_bgr
+            return True, [], last_frame
         finally:
             worker.remove_viewer()
-
-        if frame_bgr is None:
-            return False, [], None
-
-        detections = self._recognizer.detect(frame_bgr)
-        return True, detections, frame_bgr
 
     def _start_camera(self, camera_id: int, source_url: str) -> None:
         # Đăng ký path MediaMTX TRƯỚC khi worker mở capture: worker (và browser WebRTC) đọc
